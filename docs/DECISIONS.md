@@ -187,3 +187,46 @@ Jalons révisés :
 - tout passe par `shell.trashItem`, sans `sudo`.
 
 Cette exception vit dans `guard.ts`, derrière un drapeau dédié que seul le canal de désinstallation peut transmettre. Elle sera couverte par des tests (app d'un autre propriétaire, app Apple, sous-dossier de `/Applications`, lien symbolique vers une app). Tout le reste de `/Applications` reste refusé.
+
+## M4
+
+### D30. On ne nettoie que ce que MacSweep a trouvé lui-même
+
+Le processus principal garde la liste des éléments du dernier scan (chemin, catégorie, taille). `clean:execute` refuse tout chemin absent de cette liste (`not-scanned`), même s'il passe `guard.ts`. Un appel forgé ne peut donc viser qu'un élément déjà proposé à l'utilisateur. Un élément nettoyé est retiré de la liste. La taille libérée affichée est celle mesurée par le scan.
+
+### D31. Le réglage de simulation l'emporte
+
+La simulation est un réglage enregistré (actif au premier lancement, règle 7). `clean:execute` et `trash:empty` simulent si le réglage **ou** la requête le demande : une requête ne peut pas, seule, désactiver la simulation.
+
+### D32. Corbeille de test
+
+En mode test seulement (`MACSWEEP_TEST_ROOT`, app non empaquetée), les éléments sont déplacés dans `<racine de test>/.Trash` au lieu de la Corbeille macOS, pour qu'un test ne remplisse jamais la vraie Corbeille. L'app utilise toujours `shell.trashItem`. Le critère « remis en place depuis le Finder » sera vérifié à la main en M8, sur l'app installée.
+
+### D33. Revérification des apps ouvertes au nettoyage
+
+La règle 6 est revérifiée au moment du nettoyage, pas seulement après le scan. Si la liste des apps ouvertes est illisible, les éléments des catégories liées à une app (caches, logs, Xcode, simulateurs) sont refusés (`app-check-failed`). Les autres catégories sont traitées normalement.
+
+### D34. Vidage de la Corbeille
+
+- Seule la Corbeille du dossier utilisateur (`~/.Trash`) est vidée, pas celles des autres disques.
+- Le mot « VIDER » est vérifié deux fois : dans l'interface (bouton désactivé sinon) et dans le processus principal.
+- Une Corbeille qui est un lien symbolique est refusée. À l'intérieur, `fs.rm` supprime les liens sans suivre leur cible.
+- Sans Accès complet au disque, la Corbeille est illisible : le rapport le dit, et rien n'est supprimé.
+- `src/main/trash-empty.ts` est le seul fichier où ESLint autorise `fs.rm`.
+
+### D35. Historique et journal
+
+- L'historique (electron-store, au plus 500 entrées) n'enregistre que les nettoyages et les vidages réels, jamais les simulations.
+- Le journal écrit une ligne JSON par élément déplacé ou supprimé (date, action, chemin d'origine, taille) dans `<données de l'app>/logs/macsweep-AAAA-MM-JJ.jsonl`, soit `~/Library/Application Support/MacSweep/logs/` pour l'app installée.
+
+### D36. Une opération à la fois
+
+Un nettoyage ou un vidage est refusé pendant un scan, et un scan est refusé pendant un nettoyage. Le dialogue de nettoyage ne se ferme pas pendant l'opération.
+
+### D37. Signature de `clean:execute`
+
+Conforme au PRD (`clean:execute(paths, { dryRun })`). Le rapport donne en plus, pour chaque élément traité, sa catégorie (utilisée par l'historique) et, pour chaque échec, la raison du refus.
+
+### D38. Optimisation non retenue pour l'instant
+
+Le PRD suggère de mettre à la Corbeille le dossier parent quand toute une catégorie est cochée. Ce n'est pas fait : chaque élément passe par `guard.ts` un par un, ce qui reste plus sûr. À revoir si la mise à la Corbeille de milliers d'éléments s'avère lente.

@@ -48,6 +48,13 @@ const lower = (s: string) => s.normalize('NFC').toLowerCase();
  * Name of the running app an item belongs to, or null. Errs on the side of flagging:
  * a false positive only leaves an item unchecked.
  */
+/** Whether items of this category can belong to a running app (rule 6). */
+export function canBelongToApp(category: CategoryId): boolean {
+  return (
+    NAMED_AFTER_APP.has(category) || USED_BY_XCODE.has(category) || category === 'ios-simulators'
+  );
+}
+
 export function findOpenApp(
   category: CategoryId,
   itemPath: string,

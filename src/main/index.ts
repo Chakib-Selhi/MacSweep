@@ -15,6 +15,10 @@ import { createGuard } from './safety/guard';
 import { pickRoot, TEST_ROOT_ENV } from './safety/root';
 import { ScanService } from './scanner/service';
 import { createToolDeps } from './scanner/tools';
+import { createJournal } from './journal';
+import { ScanRegistry } from './scan-registry';
+import { createAppStore } from './store';
+import { macTrash, testTrash } from './trash-mover';
 
 // In a production build Forge replaces this constant with `undefined`.
 const devServerUrl: string | undefined = MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined;
@@ -174,10 +178,20 @@ async function start(): Promise<void> {
     ...DEFAULT_SCAN_SETTINGS,
   }));
   app.on('before-quit', () => scans.dispose());
+  const testMode = !app.isPackaged && process.env[TEST_ROOT_ENV] !== undefined;
 
   hardenSession(session.defaultSession);
   registerAppProtocol();
-  registerIpcHandlers({ devServerUrl, guard, scans, runTool: createToolDeps(guard.root).run });
+  registerIpcHandlers({
+    devServerUrl,
+    guard,
+    scans,
+    registry: new ScanRegistry(),
+    store: createAppStore(),
+    journal: createJournal(path.join(app.getPath('userData'), 'logs')),
+    moveToTrash: testMode ? testTrash(guard.root) : macTrash,
+    runTool: createToolDeps(guard.root).run,
+  });
   createMainWindow();
 
   app.on('activate', () => {

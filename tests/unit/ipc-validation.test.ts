@@ -5,7 +5,9 @@ import {
   expectScanId,
   expectSingleString,
   IpcValidationError,
+  parseCleanArgs,
   parseScanArgs,
+  parseSettingsPatch,
 } from '../../src/main/ipc-validation';
 
 describe('expectNoArgs', () => {
@@ -64,4 +66,34 @@ describe('parseScanArgs', () => {
   ])('refuse %s', (_label, raw) => {
     expect(() => parseScanArgs(raw)).toThrow(IpcValidationError);
   });
+});
+
+describe('parseCleanArgs', () => {
+  it('accepte une liste et des options valides (les chemins sont vérifiés ensuite par le guard)', () => {
+    expect(parseCleanArgs([['/a', 42], { dryRun: true }])).toEqual([['/a', 42], { dryRun: true }]);
+  });
+
+  it.each([
+    ['sans options', [['/a']]],
+    ['une chaîne au lieu d’une liste', ['/a', { dryRun: true }]],
+    ['dryRun absent', [['/a'], {}]],
+    ['dryRun non booléen', [['/a'], { dryRun: 'non' }]],
+    ['un champ en trop', [['/a'], { dryRun: false, force: true }]],
+    ['des options non objet', [['/a'], 'dryRun']],
+  ])('refuse %s', (_label, raw) => {
+    expect(() => parseCleanArgs(raw)).toThrow(IpcValidationError);
+  });
+});
+
+describe('parseSettingsPatch', () => {
+  it('accepte dryRun', () => {
+    expect(parseSettingsPatch([{ dryRun: false }])).toEqual([{ dryRun: false }]);
+  });
+
+  it.each([[[{}]], [[{ dryRun: 1 }]], [[{ root: '/' }]], [['dryRun']], [[]]])(
+    'refuse %j',
+    (raw) => {
+      expect(() => parseSettingsPatch(raw)).toThrow(IpcValidationError);
+    },
+  );
 });

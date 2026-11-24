@@ -2,6 +2,8 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { CATEGORY_META, type CategoryId } from '../../shared/categories';
 import type { CategoryResult, ScanItem } from '../../shared/types';
+import { CleanDialog, type CategoryShare } from '../components/CleanDialog';
+import { EmptyTrashDialog } from '../components/EmptyTrashDialog';
 import { RiskBadge } from '../components/RiskBadge';
 import { buttonStyles } from '../components/ui';
 import { formatBytes, formatDate, splitPath } from '../format';
@@ -24,8 +26,10 @@ const ITEM_WITH_WARNING_HEIGHT = 70;
 const numberFormat = new Intl.NumberFormat('fr-FR');
 
 export function Review({ onBack }: { onBack: () => void }) {
-  const { result, selected, setSelected } = useScan();
+  const { result, selected, setSelected, dryRun, setDryRun } = useScan();
   const root = result?.root ?? '';
+  const [cleanOpen, setCleanOpen] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
   const [sort, setSort] = useState<SortKey>('size');
@@ -45,6 +49,22 @@ export function Review({ onBack }: { onBack: () => void }) {
     () => new Map(categories.map((c) => [c.id, categorySelection(c, selected)])),
     [categories, selected],
   );
+  const { paths, shares } = useMemo(() => {
+    const paths: string[] = [];
+    const shares: CategoryShare[] = [];
+    for (const category of categories) {
+      let count = 0;
+      let bytes = 0;
+      for (const item of category.items) {
+        if (!selected.has(item.path)) continue;
+        paths.push(item.path);
+        count += 1;
+        bytes += item.sizeBytes;
+      }
+      if (count > 0) shares.push({ id: category.id, count, bytes });
+    }
+    return { paths, shares };
+  }, [categories, selected]);
 
   // Rows are absolutely positioned and only the visible ones are in the DOM. The app does not use
   // the React Compiler, so its warning about this hook not being memoizable does not apply.
@@ -102,6 +122,14 @@ export function Review({ onBack }: { onBack: () => void }) {
           </button>
           <h1 className="text-2xl font-semibold">{strings.review.title}</h1>
         </div>
+        {dryRun && (
+          <p
+            data-testid="dry-run-banner"
+            className="rounded-md bg-blue-50 p-3 text-sm text-blue-900 dark:bg-blue-950 dark:text-blue-200"
+          >
+            {strings.dryRun.banner}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="search"
@@ -170,6 +198,7 @@ export function Review({ onBack }: { onBack: () => void }) {
                       expanded={searching || expanded.has(row.category.id)}
                       canToggle={!searching}
                       onToggleExpanded={() => toggleExpanded(row.category.id)}
+                      onEmptyTrash={() => setTrashOpen(true)}
                       onSelect={(checked) =>
                         setSelected(
                           row.category.items
@@ -205,20 +234,39 @@ export function Review({ onBack }: { onBack: () => void }) {
             formatBytes(summary.bytes),
           )}
         </p>
-        <div className="flex items-center gap-3">
-          <span id="clean-soon" className="text-xs text-neutral-500">
-            {strings.review.cleanSoon}
-          </span>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={dryRun}
+              onChange={(event) => void setDryRun(event.target.checked)}
+              className="size-4 accent-blue-600"
+            />
+            <span>
+              {strings.dryRun.toggle}
+              <span className="ml-1 text-xs text-neutral-500">({strings.dryRun.hint})</span>
+            </span>
+          </label>
           <button
             type="button"
-            disabled
-            aria-describedby="clean-soon"
+            disabled={paths.length === 0}
+            onClick={() => setCleanOpen(true)}
             className={buttonStyles.primary}
           >
             {strings.review.clean}
           </button>
         </div>
       </footer>
+
+      {cleanOpen && (
+        <CleanDialog
+          paths={paths}
+          totalBytes={summary.bytes}
+          shares={shares}
+          onClose={() => setCleanOpen(false)}
+        />
+      )}
+      {trashOpen && <EmptyTrashDialog onClose={() => setTrashOpen(false)} />}
     </div>
   );
 }
@@ -230,11 +278,13 @@ interface CategoryRowProps {
   expanded: boolean;
   canToggle: boolean;
   onToggleExpanded: () => void;
+  onEmptyTrash: () => void;
   onSelect: (checked: boolean) => void;
 }
 
 function CategoryRow(props: CategoryRowProps) {
   const { category, matches, selection, expanded, canToggle, onToggleExpanded, onSelect } = props;
+  const { onEmptyTrash } = props;
   const label = strings.categories[category.id];
   const meta = CATEGORY_META[category.id];
   const openApps = category.items.filter((item) => item.openApp !== undefined).length;
@@ -279,9 +329,24 @@ function CategoryRow(props: CategoryRowProps) {
           {meta.permanent && ` · ${strings.review.trashNote}`}
         </p>
       </div>
-      <p className="w-40 text-right text-sm tabular-nums text-neutral-600 dark:text-neutral-400">
-        {formatBytes(selection?.bytes ?? 0)} / {formatBytes(category.totalBytes)}
-      </p>
+      {meta.permanent ? (
+        <>
+          <p className="text-sm tabular-nums text-neutral-600 dark:text-neutral-400">
+            {formatBytes(category.totalBytes)}
+          </p>
+          <button
+            type="button"
+            onClick={onEmptyTrash}
+            className={`${buttonStyles.secondary} text-red-700 dark:text-red-400`}
+          >
+            {strings.review.emptyTrash}
+          </button>
+        </>
+      ) : (
+        <p className="w-40 text-right text-sm tabular-nums text-neutral-600 dark:text-neutral-400">
+          {formatBytes(selection?.bytes ?? 0)} / {formatBytes(category.totalBytes)}
+        </p>
+      )}
     </div>
   );
 }

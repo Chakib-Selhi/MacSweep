@@ -32,6 +32,10 @@ export class ScanService {
     private readonly baseConfig: () => BaseScanConfig,
   ) {}
 
+  get isRunning(): boolean {
+    return this.active !== null;
+  }
+
   /** One scan at a time: a second request is refused rather than queued. */
   start(categories: readonly CategoryId[], sink: ScanSink): string {
     if (this.active) throw new Error('Un scan est déjà en cours');

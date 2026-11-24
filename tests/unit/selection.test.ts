@@ -8,6 +8,8 @@ import {
   selectionSummary,
   setMany,
   visibleItems,
+  withoutCategory,
+  withoutItems,
 } from '../../src/renderer/scan/selection';
 
 const item = (path: string, sizeBytes: number, modifiedMs = 0, openApp?: string): ScanItem => ({
@@ -134,5 +136,24 @@ describe('buildRows', () => {
     const rows = buildRows([big], new Set(['user-caches']), 'f9', 'date');
     expect(rows.length).toBeGreaterThan(1);
     expect(performance.now() - started).toBeLessThan(200);
+  });
+});
+
+describe('withoutItems et withoutCategory', () => {
+  it('retire les éléments nettoyés, recalcule les totaux et masque les catégories vides', () => {
+    const next = withoutItems(
+      result,
+      new Set(['/h/Library/Caches/a', '/h/Library/Developer/Xcode/Archives/2026']),
+    );
+    expect(next.categories.map((c) => c.id)).toEqual(['user-caches', 'trash']);
+    expect(next.categories[0]?.totalBytes).toBe(300);
+    expect(result.categories).toHaveLength(3);
+  });
+
+  it('retire une catégorie entière', () => {
+    expect(withoutCategory(result, 'trash').categories.map((c) => c.id)).toEqual([
+      'user-caches',
+      'xcode-archives',
+    ]);
   });
 });

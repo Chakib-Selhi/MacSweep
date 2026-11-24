@@ -1,17 +1,8 @@
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import type { GuardRefusal } from '../../shared/types';
 
-export type Refusal =
-  | 'invalid-input'
-  | 'not-found'
-  | 'unreadable'
-  | 'outside-root'
-  | 'is-root'
-  | 'forbidden'
-  | 'protected'
-  | 'git'
-  | 'trash'
-  | 'broken-symlink';
+export type Refusal = GuardRefusal;
 
 export type GuardResult = { ok: true; path: string } | { ok: false; reason: Refusal };
 

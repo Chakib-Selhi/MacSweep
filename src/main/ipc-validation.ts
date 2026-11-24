@@ -1,5 +1,11 @@
 import { CATEGORY_IDS, isCategoryId, type CategoryId } from '../shared/categories';
-import type { InvokeArgs, InvokeChannel, ScanRequest } from '../shared/types';
+import type {
+  CleanRequest,
+  InvokeArgs,
+  InvokeChannel,
+  ScanRequest,
+  Settings,
+} from '../shared/types';
 
 export type ArgsParser<C extends InvokeChannel> = (raw: readonly unknown[]) => InvokeArgs<C>;
 
@@ -62,4 +68,27 @@ function parseCategories(request: unknown): CategoryId[] {
   }
   if (!categories.every(isCategoryId)) fail('Catégorie inconnue');
   return [...new Set(categories)];
+}
+
+/**
+ * clean:execute receives a list of paths and options. Only the shape is checked here: each path
+ * goes through the guard in the cleaner, so the list stays `unknown[]` until then.
+ */
+export function parseCleanArgs(raw: readonly unknown[]): [string[], CleanRequest] {
+  const [paths, request] = raw;
+  if (raw.length !== 2 || !Array.isArray(paths)) fail('clean:execute attend une liste de chemins');
+  if (!isPlainObject(request)) fail('clean:execute attend des options');
+  const keys = Object.keys(request);
+  if (keys.length !== 1 || typeof request.dryRun !== 'boolean')
+    fail('Options de nettoyage invalides');
+  return [paths as string[], { dryRun: request.dryRun }];
+}
+
+export function parseSettingsPatch(raw: readonly unknown[]): [Partial<Settings>] {
+  const [patch] = raw;
+  if (raw.length !== 1 || !isPlainObject(patch)) fail('settings:set attend un objet');
+  const keys = Object.keys(patch);
+  if (keys.length === 0 || keys.some((key) => key !== 'dryRun')) fail('Réglage inconnu');
+  if (typeof patch.dryRun !== 'boolean') fail('dryRun doit être un booléen');
+  return [{ dryRun: patch.dryRun }];
 }

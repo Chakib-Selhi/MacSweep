@@ -79,8 +79,13 @@ test('la recherche filtre, puis Tout et Rien agissent sur les résultats', async
   await expect(bar()).toContainText('3 sélectionnés');
 });
 
-test('le nettoyage reste désactivé jusqu’au jalon M4', async () => {
-  await expect(page.getByRole('button', { name: 'Nettoyer…' })).toBeDisabled();
+test('Nettoyer… n’est actif que s’il y a une sélection', async () => {
+  const clean = page.getByRole('button', { name: 'Nettoyer…' });
+  await expect(clean).toBeEnabled();
+  await page.getByRole('button', { name: 'Ne rien sélectionner' }).click();
+  await expect(clean).toBeDisabled();
+  await page.getByRole('button', { name: 'Tout sélectionner' }).click();
+  await expect(clean).toBeEnabled();
 });
 
 test('le retour au tableau de bord conserve la sélection', async () => {

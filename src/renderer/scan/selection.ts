@@ -113,3 +113,21 @@ export function buildRows(
   }
   return rows;
 }
+
+/** The scan result once some items have left the disk: they disappear from every total. */
+export function withoutItems(result: ScanDone, removed: ReadonlySet<string>): ScanDone {
+  if (removed.size === 0) return result;
+  const categories = result.categories
+    .map((category) => {
+      const items = category.items.filter((item) => !removed.has(item.path));
+      const totalBytes = items.reduce((sum, item) => sum + item.sizeBytes, 0);
+      return { ...category, items, totalBytes };
+    })
+    .filter((category) => category.items.length > 0)
+    .sort((a, b) => b.totalBytes - a.totalBytes);
+  return { ...result, categories };
+}
+
+export function withoutCategory(result: ScanDone, id: CategoryId): ScanDone {
+  return { ...result, categories: result.categories.filter((category) => category.id !== id) };
+}

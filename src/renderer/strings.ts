@@ -1,5 +1,5 @@
 import type { CategoryId, RiskLevel } from '../shared/categories';
-import type { ScanStatus } from '../shared/types';
+import type { CleanFailureReason, ScanStatus } from '../shared/types';
 
 export const strings = {
   appName: 'MacSweep',
@@ -65,13 +65,82 @@ export const strings = {
     revealShort: 'Finder',
     openApp: (app: string) => `App ouverte (${app}) : fermez-la d’abord`,
     openAppCount: (count: number) => `${count} lié${count > 1 ? 's' : ''} à une app ouverte`,
-    trashNote: 'Vidage définitif, proposé à part au jalon M4.',
+    trashNote: 'Se vide en entier, de façon définitive.',
+    emptyTrash: 'Vider la Corbeille…',
     noMatch: 'Aucun élément ne correspond à la recherche.',
     selectedTotal: (count: string, size: string) =>
       `${count} sélectionné${count === '0' || count === '1' ? '' : 's'} · ${size}`,
     clean: 'Nettoyer…',
-    cleanSoon: 'Le nettoyage arrive au jalon M4.',
     noResult: 'Aucun résultat de scan. Lance un scan depuis le tableau de bord.',
+  },
+  dryRun: {
+    toggle: 'Mode simulation',
+    hint: 'Rien n’est déplacé',
+    banner:
+      'Mode simulation activé : le nettoyage montre ce qui serait mis à la Corbeille, sans rien déplacer. Désactive-le en bas de l’écran pour nettoyer pour de vrai.',
+  },
+  clean: {
+    titleReal: 'Mettre à la Corbeille',
+    titleDry: 'Simuler le nettoyage',
+    summary: (count: string, size: string) =>
+      `${count} élément${count === '1' ? '' : 's'} · ${size}`,
+    destinationReal:
+      'Destination : la Corbeille. Tu pourras remettre chaque élément en place depuis le Finder.',
+    destinationDry: 'Mode simulation : aucun fichier ne sera déplacé.',
+    cancel: 'Annuler',
+    confirmReal: 'Mettre à la Corbeille',
+    confirmDry: 'Lancer la simulation',
+    running: 'Nettoyage en cours…',
+    progress: (done: string, total: string) => `${done} sur ${total}`,
+    reportReal: (size: string, count: string) =>
+      `${size} libérés : ${count} élément${count === '1' ? '' : 's'} mis à la Corbeille.`,
+    reportDry: (size: string, count: string) =>
+      `Simulation : ${count} élément${count === '1' ? '' : 's'} (${size}) ${count === '1' ? 'serait mis' : 'seraient mis'} à la Corbeille. Rien n’a été déplacé.`,
+    failedTitle: (count: number) =>
+      `${count} élément${count > 1 ? 's' : ''} non traité${count > 1 ? 's' : ''}`,
+    error: 'Le nettoyage n’a pas pu se faire.',
+    close: 'Fermer',
+    reasons: {
+      'invalid-input': 'chemin invalide',
+      'not-found': 'introuvable',
+      unreadable: 'illisible',
+      'outside-root': 'hors du dossier utilisateur',
+      'is-root': 'dossier utilisateur lui-même',
+      forbidden: 'protégé par la liste noire',
+      protected: 'dossier protégé (Documents, Bureau, Images)',
+      git: 'dépôt git',
+      trash: 'dans la Corbeille',
+      'broken-symlink': 'lien cassé',
+      'not-scanned': 'absent du dernier scan',
+      'app-open': 'app ouverte',
+      'app-check-failed': 'impossible de vérifier les apps ouvertes',
+      'trash-failed': 'refusé par macOS',
+    } satisfies Record<CleanFailureReason, string>,
+  },
+  trash: {
+    title: 'Vider la Corbeille',
+    warning:
+      'Suppression définitive : les fichiers de la Corbeille ne pourront pas être récupérés.',
+    dryNote: 'Mode simulation : rien ne sera supprimé.',
+    confirmLabel: 'Tape VIDER pour confirmer',
+    confirm: 'Vider définitivement',
+    confirmDry: 'Simuler le vidage',
+    reportReal: (size: string, count: string) =>
+      `Corbeille vidée : ${size} libérés (${count} élément${count === '1' ? '' : 's'}).`,
+    reportDry: (size: string, count: string) =>
+      `Simulation : ${count} élément${count === '1' ? '' : 's'} (${size}) ${count === '1' ? 'serait supprimé' : 'seraient supprimés'}. Rien n’a été supprimé.`,
+  },
+  history: {
+    title: 'Historique',
+    empty: 'Aucun nettoyage pour l’instant. Les simulations ne sont pas enregistrées.',
+    date: 'Date',
+    kind: 'Action',
+    categories: 'Catégories',
+    items: 'Éléments',
+    freed: 'Espace libéré',
+    failed: 'Échecs',
+    kinds: { clean: 'Nettoyage', 'empty-trash': 'Vidage de la Corbeille' },
+    loadError: 'Impossible de lire l’historique.',
   },
   risk: {
     low: 'Risque faible',

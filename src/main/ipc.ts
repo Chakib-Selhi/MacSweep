@@ -1,4 +1,6 @@
 import { ipcMain, shell, type WebContents } from 'electron';
+import { randomUUID } from 'node:crypto';
+import type { CategoryId } from '../shared/categories';
 import type {
   EventChannel,
   EventContract,
@@ -6,24 +8,36 @@ import type {
   InvokeChannel,
   InvokeResult,
 } from '../shared/types';
+import { cleanPaths } from './cleaner';
 import { readDiskInfo } from './disk';
 import {
   expectNoArgs,
   expectScanId,
   expectSingleString,
+  parseCleanArgs,
   parseScanArgs,
+  parseSettingsPatch,
   type ArgsParser,
 } from './ipc-validation';
+import type { Journal } from './journal';
 import { isTrustedSenderUrl } from './origins';
 import { annotateOpenApps, listRunningApps } from './running-apps';
 import type { Guard } from './safety/guard';
+import type { ScanRegistry } from './scan-registry';
 import type { ScanService } from './scanner/service';
 import type { ToolRunner } from './scanner/tools';
+import type { AppStore } from './store';
+import { emptyTrash } from './trash-empty';
+import type { TrashMover } from './trash-mover';
 
 interface IpcDeps {
   devServerUrl: string | undefined;
   guard: Guard;
   scans: ScanService;
+  registry: ScanRegistry;
+  store: AppStore;
+  journal: Journal;
+  moveToTrash: TrashMover;
   runTool: ToolRunner;
 }
 
@@ -31,7 +45,10 @@ function send<C extends EventChannel>(target: WebContents, channel: C, payload: 
   if (!target.isDestroyed()) target.send(channel, payload);
 }
 
-export function registerIpcHandlers({ devServerUrl, guard, scans, runTool }: IpcDeps): void {
+export function registerIpcHandlers(deps: IpcDeps): void {
+  const { devServerUrl, guard, scans, registry, store, journal, moveToTrash, runTool } = deps;
+  let busyCleaning = false;
+
   function handle<C extends InvokeChannel>(
     channel: C,
     parseArgs: ArgsParser<C>,
@@ -46,10 +63,23 @@ export function registerIpcHandlers({ devServerUrl, guard, scans, runTool }: Ipc
     });
   }
 
+  /** One disk-changing operation at a time, never during a scan. */
+  async function exclusive<T>(task: () => Promise<T>): Promise<T> {
+    if (scans.isRunning) throw new Error('Un scan est en cours');
+    if (busyCleaning) throw new Error('Un nettoyage est déjà en cours');
+    busyCleaning = true;
+    try {
+      return await task();
+    } finally {
+      busyCleaning = false;
+    }
+  }
+
   handle('disk:info', expectNoArgs, () => readDiskInfo(guard.root));
 
-  handle('scan:start', parseScanArgs, (sender, request) =>
-    Promise.resolve(
+  handle('scan:start', parseScanArgs, (sender, request) => {
+    if (busyCleaning) return Promise.reject(new Error('Un nettoyage est en cours'));
+    return Promise.resolve(
       scans.start(request?.categories ?? [], {
         progress: (progress) => send(sender, 'scan:progress', progress),
         // Rule 6: items of a running app are flagged so the review leaves them unchecked.
@@ -57,11 +87,14 @@ export function registerIpcHandlers({ devServerUrl, guard, scans, runTool }: Ipc
           void listRunningApps(runTool)
             .then((apps) => annotateOpenApps(done, apps))
             .catch(() => done)
-            .then((annotated) => send(sender, 'scan:done', annotated));
+            .then((annotated) => {
+              registry.replace(annotated);
+              send(sender, 'scan:done', annotated);
+            });
         },
       }),
-    ),
-  );
+    );
+  });
 
   handle('scan:cancel', expectScanId, (_sender, scanId) => {
     scans.cancel(scanId);
@@ -73,4 +106,61 @@ export function registerIpcHandlers({ devServerUrl, guard, scans, runTool }: Ipc
     if (!result.ok) throw new Error(`Chemin refusé (${result.reason})`);
     shell.showItemInFolder(result.path);
   });
+
+  handle('clean:execute', parseCleanArgs, (sender, paths, request) =>
+    exclusive(async () => {
+      // The saved setting wins: a request cannot turn simulation off on its own.
+      const dryRun = store.getSettings().dryRun || request.dryRun;
+      const report = await cleanPaths(paths, dryRun, {
+        guard,
+        registry,
+        moveToTrash,
+        listRunningApps: () => listRunningApps(runTool),
+        journal,
+        onProgress: (progress) => send(sender, 'clean:progress', progress),
+        now: () => Date.now(),
+      });
+      if (!report.dryRun && report.moved.length > 0) {
+        store.addHistory({
+          id: randomUUID(),
+          dateMs: Date.now(),
+          kind: 'clean',
+          categories: [...new Set<CategoryId>(report.moved.map((item) => item.categoryId))],
+          bytesFreed: report.bytesFreed,
+          movedCount: report.moved.length,
+          failedCount: report.failed.length,
+        });
+      }
+      return report;
+    }),
+  );
+
+  handle('trash:empty', expectSingleString, (_sender, confirmation) =>
+    exclusive(async () => {
+      const report = await emptyTrash({
+        root: guard.root,
+        confirmation,
+        dryRun: store.getSettings().dryRun,
+        journal,
+      });
+      if (!report.dryRun && report.deletedCount > 0) {
+        store.addHistory({
+          id: randomUUID(),
+          dateMs: Date.now(),
+          kind: 'empty-trash',
+          categories: ['trash'],
+          bytesFreed: report.bytesFreed,
+          movedCount: report.deletedCount,
+          failedCount: report.failed.length,
+        });
+      }
+      return report;
+    }),
+  );
+
+  handle('settings:get', expectNoArgs, () => Promise.resolve(store.getSettings()));
+  handle('settings:set', parseSettingsPatch, (_sender, patch) =>
+    Promise.resolve(store.updateSettings(patch)),
+  );
+  handle('history:list', expectNoArgs, () => Promise.resolve(store.listHistory()));
 }

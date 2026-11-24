@@ -41,6 +41,20 @@ const api: MacSweepApi = {
   fs: {
     reveal: (path) => invoke('fs:reveal', path),
   },
+  clean: {
+    execute: (paths, request) => invoke('clean:execute', paths, request),
+    onProgress: (listener) => subscribe('clean:progress', listener),
+  },
+  trash: {
+    empty: (confirmation) => invoke('trash:empty', confirmation),
+  },
+  settings: {
+    get: () => invoke('settings:get'),
+    set: (patch) => invoke('settings:set', patch),
+  },
+  history: {
+    list: () => invoke('history:list'),
+  },
 };
 
 contextBridge.exposeInMainWorld('macsweep', api);

@@ -54,6 +54,16 @@ Pour la donner à quelqu'un d'autre, Gatekeeper affichera un avertissement. La p
 xattr -dr com.apple.quarantine /Applications/MacSweep.app
 ```
 
+## Nettoyer
+
+1. Lance un scan depuis le tableau de bord, puis « Revoir et nettoyer ».
+2. Coche ce que tu veux retirer, puis « Nettoyer… ».
+3. Au premier lancement, le **mode simulation** est actif : MacSweep montre ce qui serait mis à la Corbeille, sans rien déplacer. Décoche « Mode simulation » en bas de l'écran pour nettoyer pour de vrai.
+
+Les éléments vont dans la Corbeille macOS : tu peux les remettre en place depuis le Finder. Seul « Vider la Corbeille… » supprime définitivement, après avoir tapé « VIDER ».
+
+Chaque déplacement est noté dans `~/Library/Application Support/MacSweep/logs/` (une ligne par élément : date, chemin d'origine, taille). L'écran Historique résume les nettoyages réels.
+
 ## Activer l'Accès complet au disque
 
 Sans cet accès, certains dossiers de `~/Library` sont illisibles. MacSweep fonctionne quand même et affiche le nombre de dossiers inaccessibles.
