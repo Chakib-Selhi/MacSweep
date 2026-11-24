@@ -1,13 +1,17 @@
-import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
+import { expect, test, type ElectronApplication } from '@playwright/test';
+import { createFakeHome, launchApp, type FakeHome } from './fixture';
 
+let home: FakeHome;
 let app: ElectronApplication;
 
 test.beforeAll(async () => {
-  app = await electron.launch({ args: ['.'], cwd: process.cwd() });
+  home = await createFakeHome();
+  app = await launchApp(home);
 });
 
 test.afterAll(async () => {
   await app.close();
+  await home.cleanup();
 });
 
 test("la fenêtre s'ouvre depuis le protocole app://", async () => {
@@ -45,7 +49,11 @@ test("l'interface n'a pas accès à Node", async () => {
     process: typeof (globalThis as Record<string, unknown>).process,
     api: Object.keys(window.macsweep),
   }));
-  expect(exposed).toEqual({ require: 'undefined', process: 'undefined', api: ['disk'] });
+  expect(exposed).toEqual({
+    require: 'undefined',
+    process: 'undefined',
+    api: ['disk', 'scan', 'fs'],
+  });
 });
 
 test('la CSP stricte est appliquée et le réseau est bloqué', async () => {

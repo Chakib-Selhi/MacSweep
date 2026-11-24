@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { DiskInfo } from '../../shared/types';
+import { ScanPanel } from '../components/ScanPanel';
 import { formatBytes, percentOf } from '../format';
 import { strings } from '../strings';
 
@@ -33,6 +34,9 @@ export function Dashboard() {
           </p>
         )}
         {disk.status === 'ready' && <DiskGauge info={disk.info} />}
+      </div>
+      <div className="mt-6">
+        <ScanPanel />
       </div>
     </section>
   );

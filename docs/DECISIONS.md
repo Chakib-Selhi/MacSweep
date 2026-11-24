@@ -47,3 +47,66 @@ Le PRD place `~/Documents`, `~/Desktop` et `~/Pictures` dans la liste noire abso
 ### D11. Alerte `npm audit` sur `image-size` acceptée
 
 `npm audit` signale une faille (boucle infinie dans l'analyse des fichiers ICNS) dans `image-size`, utilisé seulement par l'outil de fabrication du `.dmg` (`@electron-forge/maker-dmg` → `appdmg`). Ce paquet n'est pas embarqué dans l'app et ne lit que nos propres icônes au moment de `npm run make`. Aucun correctif n'existe pour l'instant ; on revérifiera en M6.
+
+## M2
+
+### D12. Ordre de vérification de `guard.ts`
+
+Pour chaque chemin, `checkTrashable` vérifie dans l'ordre :
+
+1. L'entrée est une chaîne absolue de moins de 4 096 caractères, sans octet nul et **sans segment `.` ni `..`**. Les chemins issus d'un scan sont toujours canoniques : un `..` signale un appel forgé, il est refusé plutôt que normalisé.
+2. Un premier contrôle lexical sur le chemin reçu, qui arrête la liste noire avant tout accès disque.
+3. Le contrôle qui fait foi, sur l'emplacement réel de l'élément : dossier parent passé par `realpath`, élément lui-même non suivi. C'est ce chemin qui est rendu et qui sera passé à `shell.trashItem`.
+4. Pour un lien symbolique, la cible doit aussi respecter toutes les règles. Un lien qui sort de la racine, vise la liste noire, la racine elle-même ou rien du tout (lien cassé) est refusé.
+
+Les comparaisons ignorent la casse et la forme Unicode (NFC), comme APFS.
+
+### D13. Ce que la liste noire couvre en plus du PRD
+
+- Un dossier qui **contient** un élément de la liste noire est refusé (mettre `~/Library` à la Corbeille emporterait `Keychains`).
+- Un dossier qui contient directement `.git` (racine d'un dépôt) est refusé, en plus de tout chemin qui traverse un `.git`.
+- `~/.Trash` et son contenu ne passent jamais par `trashItem` : la Corbeille ne se vide que par `trash:empty` (M4).
+- `~/Documents`, `~/Desktop` et `~/Pictures` eux-mêmes sont toujours refusés, même avec la confirmation du niveau « protégé » (D9), qui ne vaut que pour leur contenu.
+- La racine elle-même est toujours refusée, et une racine égale à `/` empêche l'app de démarrer.
+
+### D14. Racine de test injectable, jamais dans l'app installée
+
+`MACSWEEP_TEST_ROOT` remplace le dossier utilisateur seulement si l'app n'est pas empaquetée **et** si le dossier existe sous `os.tmpdir()`. Une valeur invalide empêche l'app de démarrer, plutôt que de retomber en silence sur le vrai dossier utilisateur. Tous les tests de bout en bout l'utilisent.
+
+### D15. Parcours synchrone dans le worker, annulation par mémoire partagée
+
+Le PRD prévoit `fs/promises`. Le parcours utilise `opendirSync` et `lstatSync` dans le `worker_thread` : l'interface n'est jamais bloquée (autre thread), et c'est plusieurs fois plus rapide que d'attendre chaque `lstat`. Mesure : environ 147 000 entrées par seconde, soit 1 million de fichiers en à peu près 7 s, cache disque chaud. Comme le worker ne lit pas ses messages pendant un parcours synchrone, l'annulation passe par un `SharedArrayBuffer` lu toutes les 256 entrées. Si le worker ne s'est pas arrêté après 500 ms, il est terminé de force : l'annulation prend toujours moins d'une seconde.
+
+### D16. Tailles calculées comme `du`
+
+La taille d'un élément est la somme des blocs alloués (`blocks × 512`), et non la taille logique. Un fichier à plusieurs liens durs n'est compté qu'une fois par scan. Un lien symbolique compte pour sa propre taille, sans jamais être suivi.
+
+### D17. Granularité des éléments
+
+- Caches, logs, DerivedData, archives, Support des appareils, cache Homebrew, Corbeille : chaque entrée directe du dossier est un élément.
+- Caches npm/yarn/pnpm, Gradle et Maven : chaque dossier de cache entier est un élément.
+- Simulateurs : le dossier `CoreSimulator/Devices/<UDID>` de chaque simulateur indisponible. L'UDID est validé (format UUID) avant d'être utilisé dans un chemin.
+- Une entrée qui est un lien symbolique n'est jamais listée comme élément.
+- Les dossiers déjà couverts par une autre catégorie (`~/Library/Caches/Yarn`, le cache Homebrew) sont retirés des « Caches utilisateur » pour ne pas compter deux fois les mêmes octets. Le cache de MacSweep lui-même est ignoré.
+
+### D18. Âge d'un dossier = modification la plus récente à l'intérieur
+
+Pour `node_modules` (30 jours) et les installeurs (14 jours), l'âge est calculé à partir de la modification la plus récente de tout le contenu, et non de la date du dossier lui-même, qui ne change que quand on ajoute ou retire une entrée directe. Un `node_modules` touché la semaine dernière reste donc hors de la liste.
+
+### D19. Outils externes
+
+- `brew`, `xcode-select` et `xcrun` sont appelés par leur chemin absolu, avec `execFile`, des arguments fixes, un environnement minimal et un délai de 15 s.
+- `xcode-select -p` est vérifié avant `xcrun`, qui ouvrirait sinon une fenêtre d'installation des outils développeur.
+- Un outil absent ou en échec masque sa catégorie sans faire échouer le scan.
+- Toute source qui sort de la racine (par exemple `brew --cache` configuré ailleurs) est ignorée.
+
+### D20. Un seul scan à la fois
+
+Un second `scan:start` pendant un scan est refusé plutôt que mis en file. Pendant un scan, l'interface remplace « Lancer le scan » par « Annuler ».
+
+### D21. Portée de M2
+
+- Les moteurs « Gros fichiers » et « Doublons » arrivent avec leurs écrans en M5.
+- La catégorie `node_modules` est prête, mais reste masquée tant qu'aucun dossier de projets n'est réglé (M5).
+- La détection des apps ouvertes (règle 6) se fait à la revue et au nettoyage (M3 et M4).
+- Le chargement du worker depuis l'archive `app.asar` de l'app installée sera vérifié en M6 : les tests de bout en bout lancent l'app compilée hors archive.

@@ -32,7 +32,13 @@ npm run test:unit   # Vitest seul, rapide
 npm test            # types + Vitest + Playwright (empaquette l'app d'abord)
 ```
 
-Les tests ne touchent jamais au dossier utilisateur réel : ils travaillent dans un dossier temporaire.
+Les tests ne touchent jamais au dossier utilisateur réel : ils travaillent dans un dossier temporaire. Les tests de bout en bout lancent l'app avec `MACSWEEP_TEST_ROOT`, qui remplace le dossier utilisateur par un dossier sous `os.tmpdir()`. Cette variable est ignorée dans l'app installée.
+
+Pour essayer l'app sur un faux dossier utilisateur :
+
+```bash
+mkdir -p "$TMPDIR/macsweep-essai/Library/Caches/demo" && MACSWEEP_TEST_ROOT="$TMPDIR/macsweep-essai" npm start
+```
 
 ## Fabriquer l'app installable
 
@@ -59,7 +65,9 @@ Sans cet accès, certains dossiers de `~/Library` sont illisibles. MacSweep fonc
 ## Structure
 
 ```
-src/main/       processus principal : fenêtre, sécurité, IPC, accès disque
+src/main/       processus principal : fenêtre, IPC, accès disque
+  safety/       guard.ts : validation de chaque chemin (liste blanche, liste noire, liens)
+  scanner/      catégories, parcours du disque dans un worker_thread
 src/preload/    pont contextBridge, API typée window.macsweep
 src/renderer/   interface React, sans aucun accès à Node
 src/shared/     types partagés entre main et renderer

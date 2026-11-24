@@ -1,5 +1,6 @@
-import { app, BrowserWindow, nativeTheme, protocol, session, type Session } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, protocol, session, type Session } from 'electron';
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { DEV_CSP, PROD_CSP } from './csp';
 import { registerIpcHandlers } from './ipc';
@@ -10,10 +11,22 @@ import {
   mimeTypeFor,
   resolveRendererFile,
 } from './origins';
+import { createGuard } from './safety/guard';
+import { pickRoot, TEST_ROOT_ENV } from './safety/root';
+import { ScanService } from './scanner/service';
 
 // In a production build Forge replaces this constant with `undefined`.
 const devServerUrl: string | undefined = MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined;
 const rendererDir = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
+const scanWorkerPath = path.join(__dirname, 'scan-worker.cjs');
+
+// Until M5 brings the settings screen, the PRD defaults apply.
+const DEFAULT_SCAN_SETTINGS = {
+  projectDirs: [] as string[],
+  exclusions: [] as string[],
+  nodeModulesMinAgeDays: 30,
+  downloadsMinAgeDays: 14,
+};
 
 protocol.registerSchemesAsPrivileged([
   { scheme: APP_SCHEME, privileges: { standard: true, secure: true } },
@@ -94,16 +107,37 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-void app.whenReady().then(() => {
+async function start(): Promise<void> {
+  const root = await pickRoot({
+    homedir: os.homedir(),
+    tmpdir: os.tmpdir(),
+    override: process.env[TEST_ROOT_ENV],
+    isPackaged: app.isPackaged,
+  });
+  const guard = await createGuard({ root });
+  const scans = new ScanService(scanWorkerPath, () => ({
+    home: guard.root,
+    ...DEFAULT_SCAN_SETTINGS,
+  }));
+  app.on('before-quit', () => scans.dispose());
+
   hardenSession(session.defaultSession);
   registerAppProtocol();
-  registerIpcHandlers(devServerUrl);
+  registerIpcHandlers({ devServerUrl, guard, scans });
   createMainWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
-});
+}
+
+void app
+  .whenReady()
+  .then(start)
+  .catch((error: unknown) => {
+    dialog.showErrorBox('MacSweep ne peut pas démarrer', String(error));
+    app.exit(1);
+  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

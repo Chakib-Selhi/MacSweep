@@ -20,6 +20,11 @@ const config: ForgeConfig = {
       build: [
         { entry: { main: 'src/main/index.ts' }, config: 'vite.main.config.mts', target: 'main' },
         {
+          entry: { 'scan-worker': 'src/main/scanner/worker.ts' },
+          config: 'vite.main.config.mts',
+          target: 'main',
+        },
+        {
           entry: { preload: 'src/preload/index.ts' },
           config: 'vite.preload.config.mts',
           target: 'preload',
