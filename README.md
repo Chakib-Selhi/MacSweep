@@ -60,6 +60,10 @@ xattr -dr com.apple.quarantine /Applications/MacSweep.app
 2. Coche ce que tu veux retirer, puis « Nettoyer… ».
 3. Au premier lancement, le **mode simulation** est actif : MacSweep montre ce qui serait mis à la Corbeille, sans rien déplacer. Décoche « Mode simulation » en bas de l'écran pour nettoyer pour de vrai.
 
+Les écrans **Gros fichiers** et **Doublons** ont leur propre liste et leur bouton « Nettoyer… ». Pour les doublons, choisis d'abord les dossiers à analyser (écran Doublons ou Réglages) : le plus ancien fichier de chaque groupe est toujours conservé. Les éléments à risque élevé, et ceux situés dans Documents, Bureau ou Images, demandent une confirmation supplémentaire.
+
+L'écran **Réglages** règle le seuil des gros fichiers, les âges minimaux, les dossiers de projets et de doublons, et les exclusions (dossiers jamais analysés ni nettoyés).
+
 Les éléments vont dans la Corbeille macOS : tu peux les remettre en place depuis le Finder. Seul « Vider la Corbeille… » supprime définitivement, après avoir tapé « VIDER ».
 
 Chaque déplacement est noté dans `~/Library/Application Support/MacSweep/logs/` (une ligne par élément : date, chemin d'origine, taille). L'écran Historique résume les nettoyages réels.

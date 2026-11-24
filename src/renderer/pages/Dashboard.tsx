@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CATEGORY_META } from '../../shared/categories';
+import { CATEGORY_META, type CategoryPage } from '../../shared/categories';
 import type { DiskInfo, ScanDone, ScanProgress } from '../../shared/types';
 import { CategoryChart } from '../components/CategoryChart';
 import { RiskBadge } from '../components/RiskBadge';
@@ -11,7 +11,12 @@ import { strings } from '../strings';
 
 const numberFormat = new Intl.NumberFormat('fr-FR');
 
-export function Dashboard({ onReview }: { onReview: () => void }) {
+interface DashboardProps {
+  onReview: () => void;
+  onOpenPage: (page: CategoryPage) => void;
+}
+
+export function Dashboard({ onReview, onOpenPage }: DashboardProps) {
   const scan = useScan();
   const showResults = scan.result !== null && scan.phase !== 'running';
 
@@ -33,7 +38,9 @@ export function Dashboard({ onReview }: { onReview: () => void }) {
           <p className="text-neutral-600 dark:text-neutral-400">{strings.scan.intro}</p>
         )}
         {scan.phase === 'running' && <LiveProgress progress={scan.progress} />}
-        {showResults && scan.result && <Results result={scan.result} onReview={onReview} />}
+        {showResults && scan.result && (
+          <Results result={scan.result} onReview={onReview} onOpenPage={onOpenPage} />
+        )}
       </div>
     </div>
   );
@@ -169,7 +176,7 @@ function LiveProgress({ progress }: { progress: ScanProgress[] }) {
   );
 }
 
-function Results({ result, onReview }: { result: ScanDone; onReview: () => void }) {
+function Results({ result, onReview, onOpenPage }: { result: ScanDone } & DashboardProps) {
   const { selected } = useScan();
   const totalBytes = result.categories.reduce((sum, c) => sum + c.totalBytes, 0);
   const selections = useMemo(
@@ -228,6 +235,7 @@ function Results({ result, onReview }: { result: ScanDone; onReview: () => void 
             <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {result.categories.map((category) => {
                 const selection = selections.get(category.id);
+                const meta = CATEGORY_META[category.id];
                 return (
                   <li
                     key={category.id}
@@ -243,11 +251,26 @@ function Results({ result, onReview }: { result: ScanDone; onReview: () => void 
                       {formatBytes(category.totalBytes)}
                     </p>
                     <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                      {strings.scan.items(category.items.length)}
+                      {category.id === 'duplicates'
+                        ? strings.dashboard2.groups(result.duplicateGroups.length)
+                        : strings.scan.items(category.items.length)}
                       {selection &&
                         selection.count > 0 &&
                         ` · ${strings.scan.selectedInCategory(formatBytes(selection.bytes))}`}
                     </p>
+                    {meta.infoOnly && (
+                      <p className="text-xs text-neutral-500">{strings.dashboard2.infoOnly}</p>
+                    )}
+                    {meta.page && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenPage(meta.page as CategoryPage)}
+                        aria-label={`${strings.dashboard2.open} : ${strings.categories[category.id]}`}
+                        className={`${buttonStyles.secondary} self-start`}
+                      >
+                        {strings.dashboard2.open}
+                      </button>
+                    )}
                   </li>
                 );
               })}

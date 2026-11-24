@@ -31,6 +31,22 @@ const INSTALLER_EXTENSIONS = /\.(dmg|pkg|zip)$/i;
 const SIMULATOR_UDID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
 const OWN_CACHE_NAMES = new Set(['macsweep']);
 
+/** Browser cache folders directly under ~/Library/Caches (so user-caches does not count them twice). */
+export const BROWSER_CACHE_NAMES = [
+  'com.apple.Safari',
+  'Google',
+  'Firefox',
+  'Microsoft Edge',
+  'BraveSoftware',
+  'company.thebrowser.Browser',
+];
+
+const IOS_UPDATE_FOLDERS = [
+  'iPhone Software Updates',
+  'iPad Software Updates',
+  'iPod Software Updates',
+];
+
 async function isRealDir(p: string): Promise<boolean> {
   try {
     const stats = await lstat(p);
@@ -147,5 +163,44 @@ export async function planCategory(id: CategoryId, ctx: PlanContext): Promise<Ca
     }
     case 'trash':
       return childrenOf(id, home('.Trash'));
+    case 'browser-caches':
+      return pathsPlan(id, [
+        ...BROWSER_CACHE_NAMES.map((name) => home(`Library/Caches/${name}`)),
+        home('Library/Containers/com.apple.Safari/Data/Library/Caches'),
+      ]);
+    case 'xcode-caches':
+      return pathsPlan(id, [
+        home('Library/Developer/Xcode/UserData/Previews'),
+        home('Library/Developer/CoreSimulator/Caches'),
+      ]);
+    case 'ios-updates':
+      return mergePlans(
+        id,
+        await Promise.all(
+          IOS_UPDATE_FOLDERS.map((folder) => childrenOf(id, home(`Library/iTunes/${folder}`))),
+        ),
+      );
+    case 'ios-backups':
+      return childrenOf(id, home('Library/Application Support/MobileSync/Backup'));
+    case 'dev-caches':
+      return pathsPlan(id, [
+        home('Library/Caches/pip'),
+        home('.cargo/registry'),
+        home('go/pkg/mod'),
+        home('.cache'),
+      ]);
+    case 'mail-downloads':
+      return childrenOf(id, home('Library/Containers/com.apple.mail/Data/Library/Mail Downloads'));
+    case 'docker-data':
+      return pathsPlan(id, [home('Library/Containers/com.docker.docker/Data/vms')]);
+    case 'large-files':
+    case 'duplicates':
+      // Walked by the engine itself, see large-files.ts and duplicates.ts.
+      return null;
   }
+}
+
+function mergePlans(id: CategoryId, plans: (CategoryPlan | null)[]): CategoryPlan | null {
+  const sources = plans.flatMap((plan) => plan?.sources ?? []);
+  return sources.length > 0 ? { id, sources } : null;
 }

@@ -97,3 +97,59 @@ describe('parseSettingsPatch', () => {
     },
   );
 });
+
+describe('parseCleanArgs : confirmations (M5)', () => {
+  it('accepte les confirmations et ignore celles à false', () => {
+    expect(
+      parseCleanArgs([['/a'], { dryRun: false, confirmProtected: true, confirmHighRisk: false }]),
+    ).toEqual([['/a'], { dryRun: false, confirmProtected: true }]);
+  });
+
+  it('refuse une confirmation qui n’est pas un booléen', () => {
+    expect(() => parseCleanArgs([['/a'], { dryRun: false, confirmHighRisk: 'oui' }])).toThrow(
+      IpcValidationError,
+    );
+  });
+});
+
+describe('parseSettingsPatch : réglages F7', () => {
+  it('accepte chaque réglage valide', () => {
+    expect(
+      parseSettingsPatch([
+        {
+          largeFileThresholdBytes: 250_000_000,
+          downloadsMinAgeDays: 7,
+          nodeModulesMinAgeDays: 60,
+          duplicateMinBytes: 2_000_000,
+          exclusions: ['/Users/x/Archives'],
+          projectDirs: [],
+          duplicateDirs: ['/Users/x/Documents'],
+        },
+      ]),
+    ).toEqual([
+      {
+        largeFileThresholdBytes: 250_000_000,
+        downloadsMinAgeDays: 7,
+        nodeModulesMinAgeDays: 60,
+        duplicateMinBytes: 2_000_000,
+        exclusions: ['/Users/x/Archives'],
+        projectDirs: [],
+        duplicateDirs: ['/Users/x/Documents'],
+      },
+    ]);
+  });
+
+  it.each([
+    [{ largeFileThresholdBytes: 10 }],
+    [{ largeFileThresholdBytes: 1.5e9 + 0.5 }],
+    [{ downloadsMinAgeDays: -1 }],
+    [{ nodeModulesMinAgeDays: '30' }],
+    [{ exclusions: '/Users' }],
+    [{ duplicateDirs: [42] }],
+    [{ projectDirs: Array(101).fill('/a') }],
+    [{ home: '/' }],
+    [{ __proto__: { dryRun: false } }],
+  ])('refuse %j', (patch) => {
+    expect(() => parseSettingsPatch([patch])).toThrow(IpcValidationError);
+  });
+});

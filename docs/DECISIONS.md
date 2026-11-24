@@ -230,3 +230,51 @@ Conforme au PRD (`clean:execute(paths, { dryRun })`). Le rapport donne en plus, 
 ### D38. Optimisation non retenue pour l'instant
 
 Le PRD suggère de mettre à la Corbeille le dossier parent quand toute une catégorie est cochée. Ce n'est pas fait : chaque élément passe par `guard.ts` un par un, ce qui reste plus sûr. À revoir si la mise à la Corbeille de milliers d'éléments s'avère lente.
+
+## M5
+
+### D39. Gros fichiers : où MacSweep cherche
+
+Les 200 plus gros fichiers de tout le dossier utilisateur, au-dessus du seuil réglé (500 Mo par défaut). Sont exclus :
+
+- `~/Library` : données des apps, couvertes par les catégories ;
+- les dossiers cachés (nom commençant par un point) ;
+- l'intérieur des **paquets** que macOS montre comme un seul fichier (`.app`, bibliothèques Photos, Musique et TV, projets Final Cut, Logic, GarageBand, machines virtuelles, documents Pages, Numbers et Keynote…), car supprimer un fichier isolé à l'intérieur les abîmerait ;
+- la liste noire et les exclusions.
+
+La taille retenue est l'espace réellement occupé (blocs alloués), comme partout ailleurs.
+
+### D40. Doublons
+
+- Les trois passes du PRD : même taille, mêmes 64 premiers Ko (SHA-256), puis SHA-256 complet.
+- Les fichiers de moins de 1 Mo (réglable) sont ignorés, ainsi que les dossiers cachés et l'intérieur des paquets.
+- Les liens durs sont un seul et même fichier, jamais des copies. Pour un même fichier, on garde le chemin qui vient en premier dans l'ordre alphabétique.
+- Dans chaque groupe, le fichier le plus ancien est l'original. Sa case reste désactivée tant que l'utilisateur ne clique pas sur « Déverrouiller ».
+- **Garde-fou dans le processus principal** : quelle que soit la requête, la dernière copie restante d'un groupe est refusée (`last-copy`), en simulation comme en nettoyage réel.
+- Le total récupérable compte toutes les copies sauf l'original. Il peut surestimer le gain pour des copies APFS (clones), qui partagent leurs blocs : MacSweep ne sait pas les détecter.
+- Les dossiers à analyser sont choisis par l'utilisateur ; aucun par défaut.
+
+### D41. Doubles confirmations
+
+Le dialogue de nettoyage ajoute une case à cocher obligatoire :
+
+- pour tout élément situé dans Documents, Bureau ou Images (niveau « protégé » de D9), envoyée comme `confirmProtected` ;
+- pour toute catégorie à risque élevé (gros fichiers, doublons, sauvegardes d'appareils), envoyée comme `confirmHighRisk`.
+
+Le processus principal revérifie les deux : sans elles, ces éléments sont refusés (`protected`, `needs-confirmation`).
+
+### D42. Image disque Docker
+
+Affichée pour expliquer où part l'espace, jamais cochable, et refusée par le nettoyeur (`info-only`) : la supprimer effacerait toutes les images et conteneurs. On la gère depuis Docker.
+
+### D43. Réglages
+
+- Valeurs par défaut du PRD : seuil de 500 Mo, installeurs de plus de 14 jours, `node_modules` de plus de 30 jours, doublons à partir de 1 Mo.
+- Chaque champ est validé (type, bornes, champs inconnus refusés).
+- Chaque dossier choisi (exclusions, projets, doublons) passe par `guard.ts` : il doit exister et se trouver dans le dossier utilisateur. Il est enregistré par son chemin réel.
+- Le choix de dossier se fait avec le sélecteur natif de macOS, ouvert sur le dossier utilisateur.
+- Les réglages s'appliquent au scan suivant. Les **exclusions** s'appliquent aussi au nettoyage : un élément trouvé avant l'ajout d'une exclusion est refusé (`excluded`).
+
+### D44. Nouvelles catégories et apps ouvertes
+
+Les caches de navigateurs, les caches Xcode et les pièces jointes Mail sont rattachés à leur app pour la règle 6 : Safari, Chrome, Firefox, Edge, Brave et Arc ; Xcode ; Mail. Les caches de navigateurs, `pip` et les autres dossiers déjà couverts par une catégorie sont retirés des caches utilisateur, pour ne pas compter deux fois les mêmes octets.

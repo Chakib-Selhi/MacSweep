@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CategoryResult, ScanDone } from '../../src/shared/types';
 import {
   annotateOpenApps,
+  canBelongToApp,
   findOpenApp,
   parseLsappinfo,
   type RunningApp,
@@ -106,6 +107,7 @@ describe('annotateOpenApps', () => {
       scanId: 's',
       status: 'completed',
       root: '/h',
+      duplicateGroups: [],
       categories: [category],
       deniedCount: 0,
       deniedDirs: [],
@@ -116,5 +118,44 @@ describe('annotateOpenApps', () => {
       'Google Chrome',
       undefined,
     ]);
+  });
+});
+
+describe('findOpenApp : nouvelles catégories (M5)', () => {
+  const withBrowsers: RunningApp[] = [
+    ...apps,
+    { name: 'Safari', bundleId: 'com.apple.Safari' },
+    { name: 'Mail', bundleId: 'com.apple.mail' },
+  ];
+
+  it('rattache chaque cache de navigateur à son navigateur', () => {
+    expect(findOpenApp('browser-caches', '/Users/x/Library/Caches/Google', withBrowsers)).toBe(
+      'Google Chrome',
+    );
+    expect(
+      findOpenApp('browser-caches', '/Users/x/Library/Caches/com.apple.Safari', withBrowsers),
+    ).toBe('Safari');
+    expect(
+      findOpenApp(
+        'browser-caches',
+        '/Users/x/Library/Containers/com.apple.Safari/Data/Library/Caches',
+        withBrowsers,
+      ),
+    ).toBe('Safari');
+    expect(
+      findOpenApp('browser-caches', '/Users/x/Library/Caches/Firefox', withBrowsers),
+    ).toBeNull();
+  });
+
+  it('rattache les pièces jointes à Mail et les caches Xcode à Xcode', () => {
+    expect(findOpenApp('mail-downloads', '/x/Mail Downloads/abc', withBrowsers)).toBe('Mail');
+    expect(findOpenApp('xcode-caches', '/x/Previews', withBrowsers)).toBe('Xcode');
+  });
+
+  it('déclare ces catégories comme liées à une app', () => {
+    for (const id of ['browser-caches', 'mail-downloads', 'xcode-caches'] as const) {
+      expect(canBelongToApp(id)).toBe(true);
+    }
+    expect(canBelongToApp('large-files')).toBe(false);
   });
 });

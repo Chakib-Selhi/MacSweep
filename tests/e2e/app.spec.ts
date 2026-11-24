@@ -52,7 +52,7 @@ test("l'interface n'a pas accès à Node", async () => {
   expect(exposed).toEqual({
     require: 'undefined',
     process: 'undefined',
-    api: ['disk', 'scan', 'fs', 'clean', 'trash', 'settings', 'history'],
+    api: ['disk', 'scan', 'fs', 'clean', 'trash', 'settings', 'history', 'dialog'],
   });
 });
 

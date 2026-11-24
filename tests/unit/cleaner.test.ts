@@ -26,7 +26,9 @@ async function exists(p: string): Promise<boolean> {
   );
 }
 
-function scanOf(items: { path: string; categoryId: CategoryId; sizeBytes: number }[]): ScanDone {
+function scanOf(
+  items: { path: string; categoryId: CategoryId; sizeBytes: number; groupId?: string }[],
+): ScanDone {
   const byCategory = new Map<CategoryId, ScanDone['categories'][number]>();
   for (const item of items) {
     const category = byCategory.get(item.categoryId) ?? {
@@ -40,6 +42,7 @@ function scanOf(items: { path: string; categoryId: CategoryId; sizeBytes: number
       sizeBytes: item.sizeBytes,
       modifiedMs: 0,
       isDirectory: true,
+      ...(item.groupId ? { groupId: item.groupId } : {}),
     });
     category.totalBytes += item.sizeBytes;
     byCategory.set(item.categoryId, category);
@@ -49,6 +52,7 @@ function scanOf(items: { path: string; categoryId: CategoryId; sizeBytes: number
     status: 'completed',
     root,
     categories: [...byCategory.values()],
+    duplicateGroups: [],
     deniedCount: 0,
     deniedDirs: [],
     durationMs: 1,
@@ -115,7 +119,7 @@ describe('cleanPaths : mode simulation', () => {
     const { deps, trashed } = await harness();
     const report = await cleanPaths(
       [at('Library/Caches/com.a'), at('Library/Caches/com.b')],
-      true,
+      { dryRun: true },
       deps,
     );
     expect(report.dryRun).toBe(true);
@@ -133,7 +137,11 @@ describe('cleanPaths : mode simulation', () => {
 describe('cleanPaths : nettoyage réel', () => {
   it('met à la Corbeille les chemins validés, avec la taille connue du scan', async () => {
     const { deps, trashed } = await harness();
-    const report = await cleanPaths([at('Library/Caches/com.a'), at('.npm/_cacache')], false, deps);
+    const report = await cleanPaths(
+      [at('Library/Caches/com.a'), at('.npm/_cacache')],
+      { dryRun: false },
+      deps,
+    );
     expect(trashed).toEqual([at('Library/Caches/com.a'), at('.npm/_cacache')]);
     expect(report.bytesFreed).toBe(3700);
     expect(report.failed).toEqual([]);
@@ -141,7 +149,7 @@ describe('cleanPaths : nettoyage réel', () => {
 
   it('écrit chaque déplacement dans le journal (chemin, taille, date)', async () => {
     const { deps } = await harness();
-    await cleanPaths([at('Library/Caches/com.a')], false, deps);
+    await cleanPaths([at('Library/Caches/com.a')], { dryRun: false }, deps);
     const [name] = await readdir(logsDir);
     expect(name).toMatch(/^macsweep-\d{4}-\d{2}-\d{2}\.jsonl$/);
     const content = await readFile(path.join(logsDir, name as string), 'utf8');
@@ -156,8 +164,8 @@ describe('cleanPaths : nettoyage réel', () => {
 
   it('oublie un élément nettoyé : un second appel le refuse', async () => {
     const { deps } = await harness();
-    await cleanPaths([at('Library/Caches/com.a')], false, deps);
-    const again = await cleanPaths([at('Library/Caches/com.a')], false, deps);
+    await cleanPaths([at('Library/Caches/com.a')], { dryRun: false }, deps);
+    const again = await cleanPaths([at('Library/Caches/com.a')], { dryRun: false }, deps);
     expect(again.failed).toEqual([{ path: at('Library/Caches/com.a'), reason: 'not-scanned' }]);
   });
 
@@ -171,7 +179,7 @@ describe('cleanPaths : nettoyage réel', () => {
     });
     const report = await cleanPaths(
       [at('Library/Caches/com.a'), at('Library/Caches/com.b')],
-      false,
+      { dryRun: false },
       deps,
     );
     expect(report.failed).toEqual([
@@ -183,7 +191,11 @@ describe('cleanPaths : nettoyage réel', () => {
 
   it('envoie la progression jusqu’au dernier élément', async () => {
     const { deps, progress } = await harness();
-    await cleanPaths([at('Library/Caches/com.a'), at('Library/Caches/com.b')], false, deps);
+    await cleanPaths(
+      [at('Library/Caches/com.a'), at('Library/Caches/com.b')],
+      { dryRun: false },
+      deps,
+    );
     expect(progress.at(-1)).toMatchObject({ done: 2, total: 2 });
   });
 });
@@ -191,7 +203,7 @@ describe('cleanPaths : nettoyage réel', () => {
 describe('cleanPaths : refus (appel IPC forgé)', () => {
   it('refuse ce qui n’a pas été trouvé par le dernier scan', async () => {
     const { deps, trashed } = await harness();
-    const report = await cleanPaths([at('Library/Caches/pas-scanne')], false, deps);
+    const report = await cleanPaths([at('Library/Caches/pas-scanne')], { dryRun: false }, deps);
     expect(report.failed).toEqual([
       { path: at('Library/Caches/pas-scanne'), reason: 'not-scanned' },
     ]);
@@ -200,7 +212,7 @@ describe('cleanPaths : refus (appel IPC forgé)', () => {
 
   it('refuse la liste noire même si un scan l’avait listée', async () => {
     const { deps, trashed } = await harness();
-    const report = await cleanPaths([at('Library/Keychains')], false, deps);
+    const report = await cleanPaths([at('Library/Keychains')], { dryRun: false }, deps);
     expect(report.failed).toEqual([{ path: at('Library/Keychains'), reason: 'forbidden' }]);
     expect(trashed).toEqual([]);
   });
@@ -209,7 +221,7 @@ describe('cleanPaths : refus (appel IPC forgé)', () => {
     const { deps, trashed } = await harness();
     const report = await cleanPaths(
       [at('.Trash/vieux.txt'), '/etc/hosts', '../../etc', 42, null, '/System'],
-      false,
+      { dryRun: false },
       deps,
     );
     expect(report.failed.map((f) => f.reason)).toEqual([
@@ -226,13 +238,13 @@ describe('cleanPaths : refus (appel IPC forgé)', () => {
 
   it('rejette en bloc une liste qui n’est pas un tableau', async () => {
     const { deps } = await harness();
-    await expect(cleanPaths('/tmp', false, deps)).rejects.toThrow();
+    await expect(cleanPaths('/tmp', { dryRun: false }, deps)).rejects.toThrow();
   });
 
   it('ne traite qu’une fois un chemin répété', async () => {
     const { deps, trashed } = await harness();
     const a = at('Library/Caches/com.a');
-    const report = await cleanPaths([a, a], false, deps);
+    const report = await cleanPaths([a, a], { dryRun: false }, deps);
     expect(trashed).toEqual([a]);
     expect(report.bytesFreed).toBe(3000);
   });
@@ -245,7 +257,7 @@ describe('cleanPaths : apps ouvertes (règle 6, revérifiée au nettoyage)', () 
     ]);
     const report = await cleanPaths(
       [at('Library/Caches/com.google.Chrome'), at('Library/Caches/com.a')],
-      false,
+      { dryRun: false },
       deps,
     );
     expect(report.failed).toEqual([
@@ -256,10 +268,116 @@ describe('cleanPaths : apps ouvertes (règle 6, revérifiée au nettoyage)', () 
 
   it('sans liste des apps, refuse les catégories liées à une app mais pas les autres', async () => {
     const { deps, trashed } = await harness({}, new Error('lsappinfo absent'));
-    const report = await cleanPaths([at('Library/Caches/com.a'), at('.npm/_cacache')], false, deps);
+    const report = await cleanPaths(
+      [at('Library/Caches/com.a'), at('.npm/_cacache')],
+      { dryRun: false },
+      deps,
+    );
     expect(report.failed).toEqual([
       { path: at('Library/Caches/com.a'), reason: 'app-check-failed' },
     ]);
     expect(trashed).toEqual([at('.npm/_cacache')]);
+  });
+});
+
+describe('cleanPaths : confirmations et doublons (M5)', () => {
+  async function m5Harness() {
+    await file('Documents/rapport.pdf');
+    await file('Downloads/film.mp4');
+    await file('Downloads/a.bin');
+    await file('Downloads/a2.bin');
+    await file('Documents/a3.bin');
+    await file('Library/Containers/com.docker.docker/Data/vms/0/Docker.raw');
+    const registry = new ScanRegistry();
+    registry.replace(
+      scanOf([
+        { path: at('Documents/rapport.pdf'), categoryId: 'xcode-archives', sizeBytes: 100 },
+        { path: at('Downloads/film.mp4'), categoryId: 'large-files', sizeBytes: 900 },
+        { path: at('Documents/a3.bin'), categoryId: 'duplicates', sizeBytes: 50, groupId: 'g1' },
+        { path: at('Downloads/a.bin'), categoryId: 'duplicates', sizeBytes: 50, groupId: 'g1' },
+        { path: at('Downloads/a2.bin'), categoryId: 'duplicates', sizeBytes: 50, groupId: 'g1' },
+        {
+          path: at('Library/Containers/com.docker.docker/Data/vms'),
+          categoryId: 'docker-data',
+          sizeBytes: 5000,
+        },
+      ]),
+    );
+    return harness({ registry });
+  }
+
+  it('refuse un fichier protégé sans confirmation, l’accepte avec', async () => {
+    const { deps, trashed } = await m5Harness();
+    const without = await cleanPaths([at('Documents/rapport.pdf')], { dryRun: false }, deps);
+    expect(without.failed).toEqual([{ path: at('Documents/rapport.pdf'), reason: 'protected' }]);
+    await cleanPaths(
+      [at('Documents/rapport.pdf')],
+      { dryRun: false, confirmProtected: true },
+      deps,
+    );
+    expect(trashed).toEqual([at('Documents/rapport.pdf')]);
+  });
+
+  it('exige la confirmation des catégories à risque élevé', async () => {
+    const { deps, trashed } = await m5Harness();
+    const without = await cleanPaths([at('Downloads/film.mp4')], { dryRun: false }, deps);
+    expect(without.failed).toEqual([
+      { path: at('Downloads/film.mp4'), reason: 'needs-confirmation' },
+    ]);
+    await cleanPaths([at('Downloads/film.mp4')], { dryRun: false, confirmHighRisk: true }, deps);
+    expect(trashed).toEqual([at('Downloads/film.mp4')]);
+  });
+
+  it('ne nettoie jamais une catégorie d’information', async () => {
+    const { deps, trashed } = await m5Harness();
+    const report = await cleanPaths(
+      [at('Library/Containers/com.docker.docker/Data/vms')],
+      { dryRun: false, confirmHighRisk: true },
+      deps,
+    );
+    expect(report.failed.map((f) => f.reason)).toEqual(['info-only']);
+    expect(trashed).toEqual([]);
+  });
+
+  it('garde toujours une copie de chaque groupe de doublons, même si tout est demandé', async () => {
+    const { deps, trashed } = await m5Harness();
+    const all = [at('Downloads/a.bin'), at('Downloads/a2.bin'), at('Documents/a3.bin')];
+    const report = await cleanPaths(
+      all,
+      { dryRun: false, confirmHighRisk: true, confirmProtected: true },
+      deps,
+    );
+    expect(trashed).toEqual([at('Downloads/a.bin'), at('Downloads/a2.bin')]);
+    expect(report.failed).toEqual([{ path: at('Documents/a3.bin'), reason: 'last-copy' }]);
+    const again = await cleanPaths(
+      [at('Documents/a3.bin')],
+      { dryRun: false, confirmHighRisk: true, confirmProtected: true },
+      deps,
+    );
+    expect(again.failed.map((f) => f.reason)).toEqual(['last-copy']);
+  });
+
+  it('la simulation applique aussi la règle de la dernière copie', async () => {
+    const { deps } = await m5Harness();
+    const report = await cleanPaths(
+      [at('Downloads/a.bin'), at('Downloads/a2.bin'), at('Documents/a3.bin')],
+      { dryRun: true, confirmHighRisk: true, confirmProtected: true },
+      deps,
+    );
+    expect(report.moved).toHaveLength(2);
+    expect(report.failed.map((f) => f.reason)).toEqual(['last-copy']);
+  });
+});
+
+describe('cleanPaths : exclusions ajoutées après le scan', () => {
+  it('refuse ce qui se trouve dans un dossier exclu', async () => {
+    const { deps, trashed } = await harness({ exclusions: [at('Library/Caches/com.a')] });
+    const report = await cleanPaths(
+      [at('Library/Caches/com.a'), at('Library/Caches/com.b')],
+      { dryRun: false },
+      deps,
+    );
+    expect(report.failed).toEqual([{ path: at('Library/Caches/com.a'), reason: 'excluded' }]);
+    expect(trashed).toEqual([at('Library/Caches/com.b')]);
   });
 });

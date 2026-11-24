@@ -4,9 +4,11 @@ import {
   buildRows,
   categorySelection,
   defaultSelection,
+  isReviewCategory,
   isSelectable,
   selectionSummary,
   setMany,
+  summarizeSelection,
   visibleItems,
   withoutCategory,
   withoutItems,
@@ -46,6 +48,7 @@ const result: ScanDone = {
   scanId: 's',
   status: 'completed',
   root: '/h',
+  duplicateGroups: [],
   categories: [caches, archives, trash],
   deniedCount: 0,
   deniedDirs: [],
@@ -154,6 +157,54 @@ describe('withoutItems et withoutCategory', () => {
     expect(withoutCategory(result, 'trash').categories.map((c) => c.id)).toEqual([
       'user-caches',
       'xcode-archives',
+    ]);
+  });
+});
+
+describe('M5 : information seule, pages dédiées et résumé de sélection', () => {
+  const docker: CategoryResult = {
+    id: 'docker-data',
+    totalBytes: 9,
+    filesVisited: 1,
+    items: [item('/h/Library/Containers/com.docker.docker/Data/vms', 9)],
+  };
+  const large: CategoryResult = {
+    id: 'large-files',
+    totalBytes: 500,
+    filesVisited: 2,
+    items: [
+      { ...item('/h/Documents/film.mov', 400), protected: true },
+      item('/h/Downloads/image.dmg', 100),
+    ],
+  };
+
+  it('ne rend jamais cochable une catégorie d’information', () => {
+    expect(isSelectable('docker-data', docker.items[0] as ScanItem)).toBe(false);
+  });
+
+  it('sépare les catégories de la revue de celles qui ont leur écran', () => {
+    expect(isReviewCategory(caches)).toBe(true);
+    expect(isReviewCategory(large)).toBe(false);
+  });
+
+  it('résume chemins, totaux, éléments protégés et risque élevé', () => {
+    const selected = new Set(['/h/Documents/film.mov', '/h/Library/Caches/a']);
+    expect(summarizeSelection([caches, large], selected)).toEqual({
+      paths: ['/h/Library/Caches/a', '/h/Documents/film.mov'],
+      totalBytes: 700,
+      shares: [
+        { id: 'user-caches', count: 1, bytes: 300 },
+        { id: 'large-files', count: 1, bytes: 400 },
+      ],
+      protectedCount: 1,
+      highRisk: true,
+    });
+  });
+
+  it('ne compte qu’une fois un chemin présent dans deux catégories', () => {
+    const again: CategoryResult = { ...large, id: 'duplicates' };
+    expect(summarizeSelection([large, again], new Set(['/h/Downloads/image.dmg'])).paths).toEqual([
+      '/h/Downloads/image.dmg',
     ]);
   });
 });

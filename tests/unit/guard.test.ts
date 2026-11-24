@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { classifyPath, createGuard, screenPaths, type Guard } from '../../src/main/safety/guard';
+import {
+  classifyPath,
+  createGuard,
+  isBlacklisted,
+  screenPaths,
+  type Guard,
+} from '../../src/main/safety/guard';
 
 // The fixture plays the role of the home folder: nothing here touches the real one (rule 5).
 let rawRoot: string;
@@ -328,5 +334,19 @@ describe('createGuard', () => {
 
   it('refuse une racine qui n’existe pas', async () => {
     await expect(createGuard({ root: '/chemin/inexistant/macsweep' })).rejects.toThrow();
+  });
+});
+
+describe('isBlacklisted (parcours des scans)', () => {
+  it('bloque la liste noire et les dossiers système', () => {
+    expect(isBlacklisted('/Users/x/Library/Keychains', '/Users/x')).toBe(true);
+    expect(isBlacklisted('/Users/x/.ssh/cles', '/Users/x')).toBe(true);
+    expect(isBlacklisted('/System/Library', '/Users/x')).toBe(true);
+  });
+
+  it('laisse lire Documents, Bureau, Images et ~/Library', () => {
+    expect(isBlacklisted('/Users/x/Documents', '/Users/x')).toBe(false);
+    expect(isBlacklisted('/Users/x/Pictures/vacances', '/Users/x')).toBe(false);
+    expect(isBlacklisted('/Users/x/Library', '/Users/x')).toBe(false);
   });
 });

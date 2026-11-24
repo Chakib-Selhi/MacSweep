@@ -83,6 +83,9 @@ function config(overrides: Partial<ScanConfig> = {}): ScanConfig {
     exclusions: [at('Library/Caches/exclu')],
     nodeModulesMinAgeDays: 30,
     downloadsMinAgeDays: 14,
+    largeFileThresholdBytes: 1e12,
+    duplicateDirs: [],
+    duplicateMinBytes: 1_000_000,
     ...overrides,
   };
 }
@@ -161,6 +164,7 @@ describe('runScan : catégories', () => {
       [
         'downloaded-installers',
         'homebrew-cache',
+        'large-files',
         'ios-simulators',
         'js-package-caches',
         'node-modules',

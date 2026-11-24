@@ -19,9 +19,22 @@ const SIMULATOR = 'com.apple.iphonesimulator';
 const NAMED_AFTER_APP = new Set<CategoryId>(['user-caches', 'user-logs']);
 const USED_BY_XCODE = new Set<CategoryId>([
   'xcode-derived-data',
+  'xcode-caches',
   'xcode-archives',
   'ios-device-support',
 ]);
+
+/** Browser cache folder (lower-case name) → bundle identifier of the browser that uses it. */
+const BROWSER_BUNDLES = new Map([
+  ['com.apple.safari', 'com.apple.Safari'],
+  ['google', 'com.google.Chrome'],
+  ['firefox', 'org.mozilla.firefox'],
+  ['microsoft edge', 'com.microsoft.edgemac'],
+  ['bravesoftware', 'com.brave.Browser'],
+  ['company.thebrowser.browser', 'company.thebrowser.Browser'],
+]);
+const SAFARI_CONTAINER = '/containers/com.apple.safari/';
+const MAIL = 'com.apple.mail';
 
 export function parseLsappinfo(output: string): RunningApp[] {
   const apps: RunningApp[] = [];
@@ -44,17 +57,21 @@ export async function listRunningApps(run: ToolRunner): Promise<RunningApp[]> {
 
 const lower = (s: string) => s.normalize('NFC').toLowerCase();
 
+/** Whether items of this category can belong to a running app (rule 6). */
+export function canBelongToApp(category: CategoryId): boolean {
+  return (
+    NAMED_AFTER_APP.has(category) ||
+    USED_BY_XCODE.has(category) ||
+    category === 'ios-simulators' ||
+    category === 'browser-caches' ||
+    category === 'mail-downloads'
+  );
+}
+
 /**
  * Name of the running app an item belongs to, or null. Errs on the side of flagging:
  * a false positive only leaves an item unchecked.
  */
-/** Whether items of this category can belong to a running app (rule 6). */
-export function canBelongToApp(category: CategoryId): boolean {
-  return (
-    NAMED_AFTER_APP.has(category) || USED_BY_XCODE.has(category) || category === 'ios-simulators'
-  );
-}
-
 export function findOpenApp(
   category: CategoryId,
   itemPath: string,
@@ -63,6 +80,12 @@ export function findOpenApp(
   const byBundle = (id: string) => apps.find((app) => app.bundleId === id)?.name ?? null;
   if (USED_BY_XCODE.has(category)) return byBundle(XCODE);
   if (category === 'ios-simulators') return byBundle(SIMULATOR);
+  if (category === 'mail-downloads') return byBundle(MAIL);
+  if (category === 'browser-caches') {
+    if (lower(itemPath).includes(SAFARI_CONTAINER)) return byBundle('com.apple.Safari');
+    const bundle = BROWSER_BUNDLES.get(lower(path.basename(itemPath)));
+    return bundle ? byBundle(bundle) : null;
+  }
   if (!NAMED_AFTER_APP.has(category)) return null;
 
   const base = lower(path.basename(itemPath));

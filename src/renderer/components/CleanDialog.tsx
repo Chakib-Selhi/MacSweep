@@ -1,17 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { CategoryId } from '../../shared/categories';
 import type { CleanProgress, CleanReport } from '../../shared/types';
 import { formatBytes, splitPath } from '../format';
 import { useScan } from '../scan/ScanContext';
+import type { SelectionDetails } from '../scan/selection';
 import { strings } from '../strings';
 import { Dialog } from './Dialog';
 import { buttonStyles } from './ui';
-
-export interface CategoryShare {
-  id: CategoryId;
-  count: number;
-  bytes: number;
-}
 
 type Step =
   | { kind: 'confirm' }
@@ -20,18 +14,21 @@ type Step =
   | { kind: 'error' };
 
 interface CleanDialogProps {
-  paths: string[];
-  totalBytes: number;
-  shares: CategoryShare[];
+  details: SelectionDetails;
   onClose: () => void;
 }
 
 const numberFormat = new Intl.NumberFormat('fr-FR');
 
 /** Mounted only while open, so every opening starts fresh at the confirmation step. */
-export function CleanDialog({ paths, totalBytes, shares, onClose }: CleanDialogProps) {
+export function CleanDialog({ details, onClose }: CleanDialogProps) {
+  const { paths, totalBytes, shares, protectedCount, highRisk } = details;
   const { dryRun, applyCleanReport, result } = useScan();
   const [step, setStep] = useState<Step>({ kind: 'confirm' });
+  const [protectedConfirmed, setProtectedConfirmed] = useState(false);
+  const [highRiskConfirmed, setHighRiskConfirmed] = useState(false);
+  const confirmed =
+    (protectedCount === 0 || protectedConfirmed) && (!highRisk || highRiskConfirmed);
 
   useEffect(
     () =>
@@ -46,7 +43,11 @@ export function CleanDialog({ paths, totalBytes, shares, onClose }: CleanDialogP
   async function run() {
     setStep({ kind: 'running' });
     try {
-      const report = await window.macsweep.clean.execute(paths, { dryRun });
+      const report = await window.macsweep.clean.execute(paths, {
+        dryRun,
+        confirmProtected: protectedConfirmed,
+        confirmHighRisk: highRiskConfirmed,
+      });
       applyCleanReport(report);
       setStep({ kind: 'done', report });
     } catch {
@@ -87,11 +88,38 @@ export function CleanDialog({ paths, totalBytes, shares, onClose }: CleanDialogP
           >
             {dryRun ? strings.clean.destinationDry : strings.clean.destinationReal}
           </p>
-          <div className="flex justify-end gap-3">
+          {protectedCount > 0 && (
+            <label className="mb-3 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={protectedConfirmed}
+                onChange={(event) => setProtectedConfirmed(event.target.checked)}
+                className="mt-0.5 size-4 accent-blue-600"
+              />
+              <span>{strings.clean.confirmProtected(numberFormat.format(protectedCount))}</span>
+            </label>
+          )}
+          {highRisk && (
+            <label className="mb-3 flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={highRiskConfirmed}
+                onChange={(event) => setHighRiskConfirmed(event.target.checked)}
+                className="mt-0.5 size-4 accent-blue-600"
+              />
+              <span>{strings.clean.confirmHighRisk}</span>
+            </label>
+          )}
+          <div className="mt-2 flex justify-end gap-3">
             <button type="button" onClick={onClose} className={buttonStyles.secondary}>
               {strings.clean.cancel}
             </button>
-            <button type="button" onClick={() => void run()} className={buttonStyles.primary}>
+            <button
+              type="button"
+              disabled={!confirmed}
+              onClick={() => void run()}
+              className={buttonStyles.primary}
+            >
               {dryRun ? strings.clean.confirmDry : strings.clean.confirmReal}
             </button>
           </div>

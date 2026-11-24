@@ -74,21 +74,77 @@ function parseCategories(request: unknown): CategoryId[] {
  * clean:execute receives a list of paths and options. Only the shape is checked here: each path
  * goes through the guard in the cleaner, so the list stays `unknown[]` until then.
  */
+const CLEAN_OPTIONS = new Set(['dryRun', 'confirmProtected', 'confirmHighRisk']);
+
 export function parseCleanArgs(raw: readonly unknown[]): [string[], CleanRequest] {
   const [paths, request] = raw;
   if (raw.length !== 2 || !Array.isArray(paths)) fail('clean:execute attend une liste de chemins');
   if (!isPlainObject(request)) fail('clean:execute attend des options');
-  const keys = Object.keys(request);
-  if (keys.length !== 1 || typeof request.dryRun !== 'boolean')
-    fail('Options de nettoyage invalides');
-  return [paths as string[], { dryRun: request.dryRun }];
+  if (Object.keys(request).some((key) => !CLEAN_OPTIONS.has(key))) fail('Option inconnue');
+  const { dryRun, confirmProtected, confirmHighRisk } = request;
+  if (typeof dryRun !== 'boolean') fail('dryRun doit être un booléen');
+  for (const flag of [confirmProtected, confirmHighRisk]) {
+    if (flag !== undefined && typeof flag !== 'boolean') fail('Confirmation invalide');
+  }
+  return [
+    paths as string[],
+    {
+      dryRun,
+      ...(confirmProtected === true ? { confirmProtected: true } : {}),
+      ...(confirmHighRisk === true ? { confirmHighRisk: true } : {}),
+    },
+  ];
+}
+
+const MAX_FOLDERS = 100;
+
+function integerIn(value: unknown, min: number, max: number, name: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+    fail(`${name} doit être un entier entre ${min} et ${max}`);
+  }
+  return value;
+}
+
+/** Shape only: the folders themselves are checked by the guard before they are saved. */
+function folderList(value: unknown, name: string): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.length > MAX_FOLDERS ||
+    !value.every((item) => typeof item === 'string')
+  ) {
+    fail(`${name} doit être une liste de dossiers`);
+  }
+  return value;
+}
+
+const SETTING_PARSERS: { [K in keyof Settings]: (value: unknown) => Settings[K] } = {
+  dryRun: (value) => {
+    if (typeof value !== 'boolean') fail('dryRun doit être un booléen');
+    return value;
+  },
+  exclusions: (value) => folderList(value, 'exclusions'),
+  projectDirs: (value) => folderList(value, 'projectDirs'),
+  duplicateDirs: (value) => folderList(value, 'duplicateDirs'),
+  largeFileThresholdBytes: (value) =>
+    integerIn(value, 1_000_000, 1_000_000_000_000, 'largeFileThresholdBytes'),
+  duplicateMinBytes: (value) => integerIn(value, 1024, 100_000_000_000, 'duplicateMinBytes'),
+  downloadsMinAgeDays: (value) => integerIn(value, 0, 3650, 'downloadsMinAgeDays'),
+  nodeModulesMinAgeDays: (value) => integerIn(value, 0, 3650, 'nodeModulesMinAgeDays'),
+};
+
+function isSettingKey(key: string): key is keyof Settings {
+  return Object.hasOwn(SETTING_PARSERS, key);
 }
 
 export function parseSettingsPatch(raw: readonly unknown[]): [Partial<Settings>] {
   const [patch] = raw;
   if (raw.length !== 1 || !isPlainObject(patch)) fail('settings:set attend un objet');
   const keys = Object.keys(patch);
-  if (keys.length === 0 || keys.some((key) => key !== 'dryRun')) fail('Réglage inconnu');
-  if (typeof patch.dryRun !== 'boolean') fail('dryRun doit être un booléen');
-  return [{ dryRun: patch.dryRun }];
+  if (keys.length === 0) fail('Aucun réglage');
+  const parsed: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (!isSettingKey(key)) fail(`Réglage inconnu : ${key}`);
+    parsed[key] = SETTING_PARSERS[key](patch[key]);
+  }
+  return [parsed];
 }

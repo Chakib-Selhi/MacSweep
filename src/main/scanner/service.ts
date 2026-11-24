@@ -110,6 +110,7 @@ export class ScanService {
       status,
       root: this.baseConfig().home,
       categories: [],
+      duplicateGroups: [],
       deniedCount: 0,
       deniedDirs: [],
       durationMs: Date.now() - scan.startedAt,

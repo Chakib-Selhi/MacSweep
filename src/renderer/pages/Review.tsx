@@ -2,17 +2,18 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDeferredValue, useMemo, useRef, useState } from 'react';
 import { CATEGORY_META, type CategoryId } from '../../shared/categories';
 import type { CategoryResult, ScanItem } from '../../shared/types';
-import { CleanDialog, type CategoryShare } from '../components/CleanDialog';
 import { EmptyTrashDialog } from '../components/EmptyTrashDialog';
 import { RiskBadge } from '../components/RiskBadge';
+import { SelectionFooter } from '../components/SelectionFooter';
 import { buttonStyles } from '../components/ui';
 import { formatBytes, formatDate, splitPath } from '../format';
 import { useScan } from '../scan/ScanContext';
 import {
   buildRows,
   categorySelection,
+  isReviewCategory,
   isSelectable,
-  selectionSummary,
+  summarizeSelection,
   visibleItems,
   type CategorySelection,
   type Row,
@@ -23,12 +24,10 @@ import { strings } from '../strings';
 const CATEGORY_ROW_HEIGHT = 60;
 const ITEM_ROW_HEIGHT = 52;
 const ITEM_WITH_WARNING_HEIGHT = 70;
-const numberFormat = new Intl.NumberFormat('fr-FR');
 
 export function Review({ onBack }: { onBack: () => void }) {
-  const { result, selected, setSelected, dryRun, setDryRun } = useScan();
+  const { result, selected, setSelected, dryRun } = useScan();
   const root = result?.root ?? '';
-  const [cleanOpen, setCleanOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
@@ -36,35 +35,17 @@ export function Review({ onBack }: { onBack: () => void }) {
   const [expanded, setExpanded] = useState<ReadonlySet<CategoryId>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
 
-  const categories = useMemo(() => result?.categories ?? [], [result]);
+  // Large files and duplicates are cleaned from their own screens.
+  const categories = useMemo(() => (result?.categories ?? []).filter(isReviewCategory), [result]);
   const rows = useMemo(
     () => buildRows(categories, expanded, deferredQuery, sort),
     [categories, expanded, deferredQuery, sort],
-  );
-  const summary = useMemo(
-    () => (result ? selectionSummary(result, selected) : { count: 0, bytes: 0 }),
-    [result, selected],
   );
   const selections = useMemo(
     () => new Map(categories.map((c) => [c.id, categorySelection(c, selected)])),
     [categories, selected],
   );
-  const { paths, shares } = useMemo(() => {
-    const paths: string[] = [];
-    const shares: CategoryShare[] = [];
-    for (const category of categories) {
-      let count = 0;
-      let bytes = 0;
-      for (const item of category.items) {
-        if (!selected.has(item.path)) continue;
-        paths.push(item.path);
-        count += 1;
-        bytes += item.sizeBytes;
-      }
-      if (count > 0) shares.push({ id: category.id, count, bytes });
-    }
-    return { paths, shares };
-  }, [categories, selected]);
+  const details = useMemo(() => summarizeSelection(categories, selected), [categories, selected]);
 
   // Rows are absolutely positioned and only the visible ones are in the DOM. The app does not use
   // the React Compiler, so its warning about this hook not being memoizable does not apply.
@@ -224,48 +205,7 @@ export function Review({ onBack }: { onBack: () => void }) {
         )}
       </div>
 
-      <footer
-        data-testid="selection-bar"
-        className="flex items-center justify-between gap-4 bg-neutral-50 px-8 py-3 dark:bg-neutral-950"
-      >
-        <p role="status" aria-live="polite" className="font-medium tabular-nums">
-          {strings.review.selectedTotal(
-            numberFormat.format(summary.count),
-            formatBytes(summary.bytes),
-          )}
-        </p>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={dryRun}
-              onChange={(event) => void setDryRun(event.target.checked)}
-              className="size-4 accent-blue-600"
-            />
-            <span>
-              {strings.dryRun.toggle}
-              <span className="ml-1 text-xs text-neutral-500">({strings.dryRun.hint})</span>
-            </span>
-          </label>
-          <button
-            type="button"
-            disabled={paths.length === 0}
-            onClick={() => setCleanOpen(true)}
-            className={buttonStyles.primary}
-          >
-            {strings.review.clean}
-          </button>
-        </div>
-      </footer>
-
-      {cleanOpen && (
-        <CleanDialog
-          paths={paths}
-          totalBytes={summary.bytes}
-          shares={shares}
-          onClose={() => setCleanOpen(false)}
-        />
-      )}
+      <SelectionFooter details={details} />
       {trashOpen && <EmptyTrashDialog onClose={() => setTrashOpen(false)} />}
     </div>
   );

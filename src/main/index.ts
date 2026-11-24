@@ -25,14 +25,6 @@ const devServerUrl: string | undefined = MAIN_WINDOW_VITE_DEV_SERVER_URL || unde
 const rendererDir = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const scanWorkerPath = path.join(__dirname, 'scan-worker.cjs');
 
-// Until M5 brings the settings screen, the PRD defaults apply.
-const DEFAULT_SCAN_SETTINGS = {
-  projectDirs: [] as string[],
-  exclusions: [] as string[],
-  nodeModulesMinAgeDays: 30,
-  downloadsMinAgeDays: 14,
-};
-
 protocol.registerSchemesAsPrivileged([
   { scheme: APP_SCHEME, privileges: { standard: true, secure: true } },
 ]);
@@ -173,10 +165,21 @@ async function start(): Promise<void> {
     isPackaged: app.isPackaged,
   });
   const guard = await createGuard({ root });
-  const scans = new ScanService(scanWorkerPath, () => ({
-    home: guard.root,
-    ...DEFAULT_SCAN_SETTINGS,
-  }));
+  const store = createAppStore();
+  // Each scan reads the settings as they are when it starts.
+  const scans = new ScanService(scanWorkerPath, () => {
+    const settings = store.getSettings();
+    return {
+      home: guard.root,
+      projectDirs: settings.projectDirs,
+      exclusions: settings.exclusions,
+      nodeModulesMinAgeDays: settings.nodeModulesMinAgeDays,
+      downloadsMinAgeDays: settings.downloadsMinAgeDays,
+      largeFileThresholdBytes: settings.largeFileThresholdBytes,
+      duplicateDirs: settings.duplicateDirs,
+      duplicateMinBytes: settings.duplicateMinBytes,
+    };
+  });
   app.on('before-quit', () => scans.dispose());
   const testMode = !app.isPackaged && process.env[TEST_ROOT_ENV] !== undefined;
 
@@ -187,7 +190,7 @@ async function start(): Promise<void> {
     guard,
     scans,
     registry: new ScanRegistry(),
-    store: createAppStore(),
+    store,
     journal: createJournal(path.join(app.getPath('userData'), 'logs')),
     moveToTrash: testMode ? testTrash(guard.root) : macTrash,
     runTool: createToolDeps(guard.root).run,

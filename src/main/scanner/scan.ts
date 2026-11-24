@@ -1,11 +1,19 @@
 import { opendirSync, type Dir } from 'node:fs';
 import path from 'node:path';
 import type { CategoryId } from '../../shared/categories';
-import type { CategoryResult, ScanDone, ScanItem, ScanProgress } from '../../shared/types';
-import { classifyPath } from '../safety/guard';
+import type {
+  CategoryResult,
+  DuplicateGroup,
+  ScanDone,
+  ScanItem,
+  ScanProgress,
+} from '../../shared/types';
+import { classifyPath, isBlacklisted } from '../safety/guard';
 import { planCategory, type CategoryPlan, type PlanContext, type Source } from './categories';
+import { findDuplicateGroups, type DuplicateCandidate } from './duplicates';
+import { fileKind, isPackage, TopFiles } from './large-files';
 import type { ToolDeps } from './tools';
-import { Walker } from './walk';
+import { walkFiles, Walker } from './walk';
 
 export interface ScanConfig {
   scanId: string;
@@ -16,6 +24,9 @@ export interface ScanConfig {
   exclusions: readonly string[];
   nodeModulesMinAgeDays: number;
   downloadsMinAgeDays: number;
+  largeFileThresholdBytes: number;
+  duplicateDirs: readonly string[];
+  duplicateMinBytes: number;
 }
 
 export interface ScanHooks {
@@ -82,11 +93,129 @@ export async function runScan(
   let categoryFilesStart = 0;
   let lastEmit = 0;
 
+  const isExcluded = (p: string) => isUnder(p, exclusions) || isBlacklisted(p, config.home);
   const walker = new Walker({
-    isExcluded: (p) => isUnder(p, exclusions) || classifyPath(p, [config.home]) === 'forbidden',
+    isExcluded,
     shouldStop: () => hooks.shouldStop(),
     onTick: (dir) => emit(dir, false),
   });
+  const deniedSeen = new Set<string>();
+  const recordDenied = (dir: string) => {
+    if (deniedSeen.has(dir)) return;
+    deniedSeen.add(dir);
+    walker.recordDenied(dir);
+  };
+  const duplicateGroups: DuplicateGroup[] = [];
+
+  /** Every item says whether it sits in Documents, Desktop or Pictures (D9). */
+  function makeItem(
+    itemPath: string,
+    sizeBytes: number,
+    modifiedMs: number,
+    isDirectory: boolean,
+    extra: Partial<ScanItem> = {},
+  ): ScanItem {
+    const isProtected = classifyPath(itemPath, [config.home]) === 'protected';
+    return {
+      path: itemPath,
+      sizeBytes,
+      modifiedMs,
+      isDirectory,
+      ...(isProtected ? { protected: true } : {}),
+      ...extra,
+    };
+  }
+
+  function startCategory(id: CategoryId): void {
+    currentCategory = id;
+    categoryBytes = 0;
+    categoryFilesStart = walker.filesVisited;
+    emit('', true);
+  }
+
+  /** F5: the biggest files of the whole home folder, outside ~/Library, hidden folders and packages. */
+  function scanLargeFiles(): CategoryResult {
+    startCategory('large-files');
+    const top = new TopFiles();
+    const library = pathKey(path.join(config.home, 'Library'));
+    walkFiles([config.home], {
+      skipDir: (dir, name) =>
+        name.startsWith('.') || isPackage(name) || pathKey(dir) === library || isExcluded(dir),
+      onFile: (file, stats) => {
+        walker.filesVisited += 1;
+        const sizeBytes = stats.blocks * 512;
+        if (sizeBytes >= config.largeFileThresholdBytes) {
+          top.add({ path: file, sizeBytes, modifiedMs: stats.mtimeMs });
+        }
+      },
+      onDenied: recordDenied,
+      shouldStop: () => walker.checkStop(),
+      onTick: (dir) => emit(dir, false),
+    });
+    const items = top
+      .result()
+      .filter((file) => classifyPath(file.path, [config.home], { confirmProtected: true }) === null)
+      .map((file) =>
+        makeItem(file.path, file.sizeBytes, file.modifiedMs, false, {
+          fileKind: fileKind(file.path),
+        }),
+      );
+    categoryBytes = items.reduce((sum, item) => sum + item.sizeBytes, 0);
+    return {
+      id: 'large-files',
+      items,
+      totalBytes: categoryBytes,
+      filesVisited: walker.filesVisited - categoryFilesStart,
+    };
+  }
+
+  /** F6: identical files in the folders the user chose. The category total is what can be freed. */
+  function scanDuplicates(dirs: readonly string[]): CategoryResult {
+    startCategory('duplicates');
+    // Hard links are the same file, not copies: one path per inode, the first in name order.
+    const byInode = new Map<string, DuplicateCandidate>();
+    walkFiles(dirs, {
+      skipDir: (dir, name) => name.startsWith('.') || isPackage(name) || isExcluded(dir),
+      onFile: (file, stats) => {
+        walker.filesVisited += 1;
+        if (stats.size < config.duplicateMinBytes) return;
+        const inode = `${stats.dev}:${stats.ino}`;
+        const known = byInode.get(inode);
+        if (known && known.path.localeCompare(file) <= 0) return;
+        byInode.set(inode, {
+          path: file,
+          size: stats.size,
+          allocatedBytes: stats.blocks * 512,
+          modifiedMs: stats.mtimeMs,
+        });
+      },
+      onDenied: recordDenied,
+      shouldStop: () => walker.checkStop(),
+      onTick: (dir) => emit(dir, false),
+    });
+
+    const items: ScanItem[] = [];
+    for (const group of findDuplicateGroups(
+      [...byInode.values()],
+      () => walker.checkStop(),
+      (p) => emit(p, false),
+    )) {
+      const id = group.hash.slice(0, 16);
+      const files = group.files.map((file) =>
+        makeItem(file.path, file.allocatedBytes, file.modifiedMs, false, { groupId: id }),
+      );
+      duplicateGroups.push({ id, sizeBytes: files[0]?.sizeBytes ?? 0, files });
+      items.push(...files);
+      categoryBytes += files.slice(1).reduce((sum, file) => sum + file.sizeBytes, 0);
+    }
+    duplicateGroups.sort((a, b) => b.sizeBytes * b.files.length - a.sizeBytes * a.files.length);
+    return {
+      id: 'duplicates',
+      items,
+      totalBytes: categoryBytes,
+      filesVisited: walker.filesVisited - categoryFilesStart,
+    };
+  }
 
   function emit(currentDir: string, force: boolean): void {
     const now = hooks.now();
@@ -181,10 +310,7 @@ export async function runScan(
 
     for (const plan of plans) {
       if (walker.checkStop()) break;
-      currentCategory = plan.id;
-      categoryBytes = 0;
-      categoryFilesStart = walker.filesVisited;
-      emit('', true);
+      startCategory(plan.id);
 
       const items: ScanItem[] = [];
       const minAgeMs = plan.minAgeDays === undefined ? 0 : plan.minAgeDays * DAY_MS;
@@ -194,12 +320,7 @@ export async function runScan(
         const measure = walker.measure(candidate);
         if (!measure) continue;
         if (minAgeMs > 0 && hooks.now() - measure.newestMtimeMs < minAgeMs) continue;
-        items.push({
-          path: candidate,
-          sizeBytes: measure.bytes,
-          modifiedMs: measure.newestMtimeMs,
-          isDirectory: measure.isDirectory,
-        });
+        items.push(makeItem(candidate, measure.bytes, measure.newestMtimeMs, measure.isDirectory));
         categoryBytes += measure.bytes;
       }
       items.sort((a, b) => b.sizeBytes - a.sizeBytes);
@@ -210,6 +331,22 @@ export async function runScan(
         filesVisited: walker.filesVisited - categoryFilesStart,
       });
       emit('', true);
+    }
+
+    if (config.categories.includes('large-files') && !walker.checkStop()) {
+      results.push(scanLargeFiles());
+    }
+    // Chosen folders only need to be readable: Documents itself is a valid choice.
+    const duplicateDirs = config.duplicateDirs.filter(
+      (dir) =>
+        classifyPath(dir, [config.home]) !== 'outside-root' && !isBlacklisted(dir, config.home),
+    );
+    if (
+      config.categories.includes('duplicates') &&
+      duplicateDirs.length > 0 &&
+      !walker.checkStop()
+    ) {
+      results.push(scanDuplicates(duplicateDirs));
     }
   } catch (error) {
     return done('failed', error instanceof Error ? error.message : String(error));
@@ -223,6 +360,7 @@ export async function runScan(
       status,
       root: config.home,
       categories: results,
+      duplicateGroups,
       deniedCount: walker.deniedCount,
       deniedDirs: [...walker.deniedDirs],
       durationMs: hooks.now() - startedAt,

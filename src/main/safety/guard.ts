@@ -86,6 +86,19 @@ export function classifyPath(
   return null;
 }
 
+/**
+ * For scans: whether a folder must never be entered (system folders, the blacklist).
+ * Unlike classifyPath, Documents, Desktop and Pictures stay readable.
+ */
+export function isBlacklisted(absolutePath: string, root: string): boolean {
+  const target = segments(absolutePath);
+  if (SYSTEM_SEGMENTS.some((system) => startsWith(target, system))) return true;
+  const rootSegments = segments(root);
+  if (!startsWith(target, rootSegments)) return false;
+  const relative = target.slice(rootSegments.length);
+  return FORBIDDEN_SEGMENTS.some((forbidden) => startsWith(relative, forbidden));
+}
+
 function normalizeInput(input: unknown): string | null {
   if (typeof input !== 'string') return null;
   if (input.length === 0 || input.length > MAX_PATH_LENGTH || input.includes('\0')) return null;

@@ -18,6 +18,21 @@ export interface ScanItem {
   isDirectory: boolean;
   /** Set when the app this item belongs to is running: it is then left unchecked (rule 6). */
   openApp?: string;
+  /** Inside Documents, Desktop or Pictures: cleaning it needs an extra confirmation (D9). */
+  protected?: boolean;
+  /** Large files: what kind of file it is, for the type filters. */
+  fileKind?: FileKind;
+  /** Duplicates: the group of identical files it belongs to. */
+  groupId?: string;
+}
+
+export type FileKind = 'video' | 'disk-image' | 'archive' | 'other';
+
+/** Identical files (same SHA-256). `files` is sorted oldest first: the first one is kept. */
+export interface DuplicateGroup {
+  id: string;
+  sizeBytes: number;
+  files: ScanItem[];
 }
 
 export interface CategoryResult {
@@ -44,6 +59,7 @@ export interface ScanDone {
   root: string;
   /** Sorted by total size, largest first. Categories whose tool or folder is missing are absent. */
   categories: CategoryResult[];
+  duplicateGroups: DuplicateGroup[];
   deniedCount: number;
   /** First denied folders, capped so a huge permission problem does not flood the UI. */
   deniedDirs: string[];
@@ -73,15 +89,38 @@ export type CleanFailureReason =
   /** Running apps could not be listed, so rule 6 could not be checked. */
   | 'app-check-failed'
   /** macOS refused to move the item (locked file, permission). */
-  | 'trash-failed';
+  | 'trash-failed'
+  /** A high-risk category needs the extra confirmation of the clean dialog. */
+  | 'needs-confirmation'
+  /** Listed to explain disk usage only (Docker image), never cleaned. */
+  | 'info-only'
+  /** It is the last remaining copy of a group of duplicates. */
+  | 'last-copy'
+  /** Inside a folder of the exclusion list (F7). */
+  | 'excluded';
 
 export interface Settings {
   /** Simulation: show what would be moved without moving anything. On at first launch. */
   dryRun: boolean;
+  /** Folders MacSweep never scans nor touches. */
+  exclusions: string[];
+  /** Large files: only files at least this big are listed (F5). */
+  largeFileThresholdBytes: number;
+  downloadsMinAgeDays: number;
+  nodeModulesMinAgeDays: number;
+  /** Folders searched for old node_modules. */
+  projectDirs: string[];
+  /** Folders searched for duplicates (F6). */
+  duplicateDirs: string[];
+  duplicateMinBytes: number;
 }
 
 export interface CleanRequest {
   dryRun: boolean;
+  /** Typed confirmation for files inside Documents, Desktop or Pictures. */
+  confirmProtected?: boolean;
+  /** Typed confirmation for high-risk categories (large files, duplicates, iPhone backups). */
+  confirmHighRisk?: boolean;
 }
 
 export interface CleanedItem {
@@ -137,6 +176,8 @@ export interface InvokeContract {
   'settings:get': { args: []; result: Settings };
   'settings:set': { args: [patch: Partial<Settings>]; result: Settings };
   'history:list': { args: []; result: HistoryEntry[] };
+  /** Native folder picker; resolves to a folder inside the home folder, or null if cancelled. */
+  'dialog:pickFolder': { args: []; result: string | null };
 }
 
 export interface EventContract {
@@ -179,5 +220,8 @@ export interface MacSweepApi {
   };
   history: {
     list(): Promise<HistoryEntry[]>;
+  };
+  dialog: {
+    pickFolder(): Promise<string | null>;
   };
 }

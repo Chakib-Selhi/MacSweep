@@ -16,9 +16,60 @@ export interface CategorySelection extends SelectionSummary {
   state: 'all' | 'some' | 'none';
 }
 
-/** The Trash is emptied as a whole (M4), and items of a running app are left alone (rule 6). */
+/**
+ * The Trash is emptied as a whole (M4), information-only categories are never cleaned, and items
+ * of a running app are left alone (rule 6).
+ */
 export function isSelectable(categoryId: CategoryId, item: ScanItem): boolean {
-  return !CATEGORY_META[categoryId].permanent && item.openApp === undefined;
+  const meta = CATEGORY_META[categoryId];
+  return !meta.permanent && !meta.infoOnly && item.openApp === undefined;
+}
+
+/** Large files and duplicates have their own screens; every other category is in the review. */
+export function isReviewCategory(category: CategoryResult): boolean {
+  return CATEGORY_META[category.id].page === undefined;
+}
+
+export interface SelectionDetails {
+  paths: string[];
+  totalBytes: number;
+  shares: { id: CategoryId; count: number; bytes: number }[];
+  /** Items in Documents, Desktop or Pictures: the clean dialog asks for an extra confirmation. */
+  protectedCount: number;
+  /** At least one high-risk category: the clean dialog asks for an extra confirmation. */
+  highRisk: boolean;
+}
+
+/** What a page's clean button would send, a path counted once even if listed twice. */
+export function summarizeSelection(
+  categories: readonly CategoryResult[],
+  selected: ReadonlySet<string>,
+): SelectionDetails {
+  const seen = new Set<string>();
+  const details: SelectionDetails = {
+    paths: [],
+    totalBytes: 0,
+    shares: [],
+    protectedCount: 0,
+    highRisk: false,
+  };
+  for (const category of categories) {
+    let count = 0;
+    let bytes = 0;
+    for (const item of category.items) {
+      if (!selected.has(item.path) || seen.has(item.path)) continue;
+      seen.add(item.path);
+      details.paths.push(item.path);
+      if (item.protected) details.protectedCount += 1;
+      count += 1;
+      bytes += item.sizeBytes;
+    }
+    if (count === 0) continue;
+    details.shares.push({ id: category.id, count, bytes });
+    details.totalBytes += bytes;
+    if (CATEGORY_META[category.id].risk === 'high') details.highRisk = true;
+  }
+  return details;
 }
 
 export function defaultSelection(result: ScanDone): Set<string> {

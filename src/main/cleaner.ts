@@ -1,3 +1,4 @@
+import { CATEGORY_META } from '../shared/categories';
 import type { CleanFailure, CleanProgress, CleanReport, CleanedItem } from '../shared/types';
 import type { Journal } from './journal';
 import { canBelongToApp, findOpenApp, type RunningApp } from './running-apps';
@@ -11,6 +12,8 @@ export interface CleanDeps {
   moveToTrash(path: string): Promise<void>;
   listRunningApps(): Promise<RunningApp[]>;
   journal: Journal;
+  /** Folders of the exclusion list, as saved now (they may have changed since the scan). */
+  exclusions?: readonly string[];
   onProgress(progress: CleanProgress): void;
   now(): number;
 }
@@ -22,15 +25,22 @@ function describe(input: unknown): string {
   return typeof input === 'string' ? input : `<${typeof input}>`;
 }
 
+export interface CleanOptions {
+  dryRun: boolean;
+  confirmProtected?: boolean;
+  confirmHighRisk?: boolean;
+}
+
 /**
  * Moves validated paths to the Trash, one by one. Every path goes through the guard, must come
  * from the latest scan, and must not belong to a running app. A failure is skipped and reported.
  */
 export async function cleanPaths(
   raw: unknown,
-  dryRun: boolean,
+  options: CleanOptions,
   deps: CleanDeps,
 ): Promise<CleanReport> {
+  const { dryRun } = options;
   if (!Array.isArray(raw)) throw new GuardInputError('La liste de chemins doit être un tableau');
   if (raw.length > MAX_PATHS) throw new GuardInputError('Trop de chemins');
   const inputs = raw as unknown[];
@@ -40,6 +50,8 @@ export async function cleanPaths(
   const moved: CleanedItem[] = [];
   const failed: CleanFailure[] = [];
   const handled = new Set<string>();
+  /** Duplicates: copies of each group still on disk once this request is done. */
+  const groupRemaining = new Map<string, number>();
   let lastProgress = 0;
 
   const progress = (done: number, currentPath: string, force = false) => {
@@ -51,7 +63,9 @@ export async function cleanPaths(
 
   for (const [index, input] of inputs.entries()) {
     progress(index, describe(input));
-    const checked = await deps.guard.checkTrashable(input);
+    const checked = await deps.guard.checkTrashable(input, {
+      confirmProtected: options.confirmProtected === true,
+    });
     if (!checked.ok) {
       failed.push({ path: describe(input), reason: checked.reason });
       continue;
@@ -59,11 +73,34 @@ export async function cleanPaths(
     const target = checked.path;
     if (handled.has(target)) continue;
     handled.add(target);
+    if (deps.exclusions?.some((dir) => target === dir || target.startsWith(`${dir}/`))) {
+      failed.push({ path: target, reason: 'excluded' });
+      continue;
+    }
 
     const scanned = deps.registry.get(target);
     if (!scanned) {
       failed.push({ path: target, reason: 'not-scanned' });
       continue;
+    }
+    const meta = CATEGORY_META[scanned.categoryId];
+    if (meta.infoOnly) {
+      failed.push({ path: target, reason: 'info-only' });
+      continue;
+    }
+    if (meta.risk === 'high' && options.confirmHighRisk !== true) {
+      failed.push({ path: target, reason: 'needs-confirmation' });
+      continue;
+    }
+    if (scanned.groupId) {
+      const remaining =
+        groupRemaining.get(scanned.groupId) ?? deps.registry.groupSize(scanned.groupId);
+      // Whatever the request says, one copy of each group stays on disk.
+      if (remaining <= 1) {
+        failed.push({ path: target, reason: 'last-copy' });
+        continue;
+      }
+      groupRemaining.set(scanned.groupId, remaining - 1);
     }
     if (canBelongToApp(scanned.categoryId)) {
       if (!apps) {

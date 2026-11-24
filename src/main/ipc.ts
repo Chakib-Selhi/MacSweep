@@ -1,4 +1,4 @@
-import { ipcMain, shell, type WebContents } from 'electron';
+import { BrowserWindow, dialog, ipcMain, shell, type WebContents } from 'electron';
 import { randomUUID } from 'node:crypto';
 import type { CategoryId } from '../shared/categories';
 import type {
@@ -111,12 +111,14 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     exclusive(async () => {
       // The saved setting wins: a request cannot turn simulation off on its own.
       const dryRun = store.getSettings().dryRun || request.dryRun;
-      const report = await cleanPaths(paths, dryRun, {
+      const options = { ...request, dryRun };
+      const report = await cleanPaths(paths, options, {
         guard,
         registry,
         moveToTrash,
         listRunningApps: () => listRunningApps(runTool),
         journal,
+        exclusions: store.getSettings().exclusions,
         onProgress: (progress) => send(sender, 'clean:progress', progress),
         now: () => Date.now(),
       });
@@ -159,8 +161,42 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   );
 
   handle('settings:get', expectNoArgs, () => Promise.resolve(store.getSettings()));
-  handle('settings:set', parseSettingsPatch, (_sender, patch) =>
-    Promise.resolve(store.updateSettings(patch)),
-  );
+  /** Every saved folder must be readable and inside the home folder; stored by its real path. */
+  async function checkFolders(folders: readonly string[]): Promise<string[]> {
+    const checked = new Set<string>();
+    for (const folder of folders) {
+      const result = await guard.checkReadable(folder);
+      if (!result.ok) throw new Error(`Dossier refusé (${result.reason}) : ${folder}`);
+      checked.add(result.path);
+    }
+    return [...checked];
+  }
+
+  handle('settings:set', parseSettingsPatch, async (_sender, patch) => {
+    const checked = { ...patch };
+    for (const key of ['exclusions', 'projectDirs', 'duplicateDirs'] as const) {
+      const folders = patch[key];
+      if (folders) checked[key] = await checkFolders(folders);
+    }
+    return store.updateSettings(checked);
+  });
+
   handle('history:list', expectNoArgs, () => Promise.resolve(store.listHistory()));
+
+  handle('dialog:pickFolder', expectNoArgs, async (sender) => {
+    const window = BrowserWindow.fromWebContents(sender);
+    const options = {
+      properties: ['openDirectory' as const],
+      defaultPath: guard.root,
+      buttonLabel: 'Choisir',
+    };
+    const picked = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    const [folder] = picked.filePaths;
+    if (picked.canceled || !folder) return null;
+    const result = await guard.checkReadable(folder);
+    if (!result.ok) throw new Error('Choisis un dossier situé dans ton dossier utilisateur');
+    return result.path;
+  });
 }

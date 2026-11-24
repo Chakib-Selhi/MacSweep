@@ -55,6 +55,9 @@ const api: MacSweepApi = {
   history: {
     list: () => invoke('history:list'),
   },
+  dialog: {
+    pickFolder: () => invoke('dialog:pickFolder'),
+  },
 };
 
 contextBridge.exposeInMainWorld('macsweep', api);
