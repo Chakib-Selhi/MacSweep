@@ -104,6 +104,7 @@ export class ScanService {
     return {
       scanId: scan.scanId,
       status,
+      root: this.baseConfig().home,
       categories: [],
       deniedCount: 0,
       deniedDirs: [],

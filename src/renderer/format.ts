@@ -17,7 +17,29 @@ export function formatBytes(bytes: number): string {
   return `${number} ${UNITS[unit]}`;
 }
 
+/** Splits a path into its name and its folder, the root shown as `~`. */
+export function splitPath(fullPath: string, root: string): { name: string; folder: string } {
+  const cut = fullPath.lastIndexOf('/');
+  const name = fullPath.slice(cut + 1);
+  const folder = fullPath.slice(0, Math.max(cut, 0));
+  if (folder === root) return { name, folder: '~' };
+  if (folder.startsWith(`${root}/`)) return { name, folder: `~${folder.slice(root.length)}` };
+  return { name, folder };
+}
+
+export function formatDuration(ms: number): string {
+  if (ms < 1000) return `${Math.max(1, Math.round(ms))} ms`;
+  const seconds = ms / 1000;
+  return `${seconds.toLocaleString('fr-FR', { maximumFractionDigits: seconds < 10 ? 1 : 0 })} s`;
+}
+
 export function percentOf(part: number, total: number): number {
   if (total <= 0) return 0;
   return Math.round((part / total) * 100);
+}
+
+const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' });
+
+export function formatDate(ms: number): string {
+  return Number.isFinite(ms) && ms > 0 ? dateFormat.format(ms) : '—';
 }

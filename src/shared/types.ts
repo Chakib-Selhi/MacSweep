@@ -16,6 +16,8 @@ export interface ScanItem {
   /** Most recent modification inside the item (the item itself for a file). */
   modifiedMs: number;
   isDirectory: boolean;
+  /** Set when the app this item belongs to is running: it is then left unchecked (rule 6). */
+  openApp?: string;
 }
 
 export interface CategoryResult {
@@ -38,6 +40,8 @@ export type ScanStatus = 'completed' | 'cancelled' | 'failed';
 export interface ScanDone {
   scanId: string;
   status: ScanStatus;
+  /** Folder the scan ran under (the home folder), used to show paths as ~/… */
+  root: string;
   /** Sorted by total size, largest first. Categories whose tool or folder is missing are absent. */
   categories: CategoryResult[];
   deniedCount: number;

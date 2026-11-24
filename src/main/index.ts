@@ -14,6 +14,7 @@ import {
 import { createGuard } from './safety/guard';
 import { pickRoot, TEST_ROOT_ENV } from './safety/root';
 import { ScanService } from './scanner/service';
+import { createToolDeps } from './scanner/tools';
 
 // In a production build Forge replaces this constant with `undefined`.
 const devServerUrl: string | undefined = MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined;
@@ -31,6 +32,12 @@ const DEFAULT_SCAN_SETTINGS = {
 protocol.registerSchemesAsPrivileged([
   { scheme: APP_SCHEME, privileges: { standard: true, secure: true } },
 ]);
+
+// Test runs get their own data folder: they never share the lock, settings or history of
+// the instance the user may have open.
+if (!app.isPackaged && process.env[TEST_ROOT_ENV]) {
+  app.setPath('userData', path.join(os.tmpdir(), `macsweep-test-userdata-${process.pid}`));
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -123,7 +130,7 @@ async function start(): Promise<void> {
 
   hardenSession(session.defaultSession);
   registerAppProtocol();
-  registerIpcHandlers({ devServerUrl, guard, scans });
+  registerIpcHandlers({ devServerUrl, guard, scans, runTool: createToolDeps(guard.root).run });
   createMainWindow();
 
   app.on('activate', () => {

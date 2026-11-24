@@ -221,6 +221,7 @@ export async function runScan(
     return {
       scanId: config.scanId,
       status,
+      root: config.home,
       categories: results,
       deniedCount: walker.deniedCount,
       deniedDirs: [...walker.deniedDirs],

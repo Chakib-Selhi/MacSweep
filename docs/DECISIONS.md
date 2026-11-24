@@ -110,3 +110,31 @@ Un second `scan:start` pendant un scan est refusé plutôt que mis en file. Pend
 - La catégorie `node_modules` est prête, mais reste masquée tant qu'aucun dossier de projets n'est réglé (M5).
 - La détection des apps ouvertes (règle 6) se fait à la revue et au nettoyage (M3 et M4).
 - Le chargement du worker depuis l'archive `app.asar` de l'app installée sera vérifié en M6 : les tests de bout en bout lancent l'app compilée hors archive.
+
+## M3
+
+### D22. Détection des apps ouvertes (règle 6)
+
+Après chaque scan, le processus principal lit `lsappinfo list` (nom et `bundleID` de chaque app ouverte) et marque les éléments concernés. L'interface les affiche « App ouverte (Nom) : fermez-la d'abord », décochés, avec une case désactivée. Un élément est rattaché à une app quand :
+
+- Caches et Logs : le nom du dossier est le nom de l'app, son `bundleID`, un sous-identifiant (`com.google.Chrome.helper`), ou le premier mot du nom de l'app (`Google` pour Google Chrome).
+- DerivedData, Archives et Support des appareils : Xcode est ouvert.
+- Simulateurs : l'app Simulator est ouverte.
+
+Le rapprochement penche vers le signalement : un faux positif laisse seulement un élément décoché. Si `lsappinfo` échoue, le résultat est envoyé sans marquage ; l'état des apps sera revérifié au moment du nettoyage (M4).
+
+### D23. La Corbeille n'est jamais cochable dans la revue
+
+Ses éléments sont affichés, mais sans case active : la Corbeille se vide en entier, de façon définitive, par une action à part avec double confirmation (M4).
+
+### D24. Portée de « Tout sélectionner » et « Ne rien sélectionner »
+
+Les deux boutons agissent sur les éléments qui correspondent à la recherche en cours, toutes catégories confondues. Sans recherche, ils agissent sur tout. Les éléments non cochables (app ouverte, Corbeille) ne sont jamais cochés.
+
+### D25. Données séparées pour les tests
+
+Quand `MACSWEEP_TEST_ROOT` est actif (app non empaquetée), l'app utilise un dossier de données temporaire. Les tests ne partagent ainsi ni le verrou d'instance unique, ni, à partir de M4, les réglages et l'historique d'une instance ouverte par l'utilisateur.
+
+### D26. Affichage des chemins
+
+Dans la revue, chaque élément montre son nom en clair et son dossier en dessous, la racine abrégée en `~`. Le chemin complet reste visible au survol.

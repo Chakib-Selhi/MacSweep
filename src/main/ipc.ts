@@ -15,20 +15,23 @@ import {
   type ArgsParser,
 } from './ipc-validation';
 import { isTrustedSenderUrl } from './origins';
+import { annotateOpenApps, listRunningApps } from './running-apps';
 import type { Guard } from './safety/guard';
 import type { ScanService } from './scanner/service';
+import type { ToolRunner } from './scanner/tools';
 
 interface IpcDeps {
   devServerUrl: string | undefined;
   guard: Guard;
   scans: ScanService;
+  runTool: ToolRunner;
 }
 
 function send<C extends EventChannel>(target: WebContents, channel: C, payload: EventContract[C]) {
   if (!target.isDestroyed()) target.send(channel, payload);
 }
 
-export function registerIpcHandlers({ devServerUrl, guard, scans }: IpcDeps): void {
+export function registerIpcHandlers({ devServerUrl, guard, scans, runTool }: IpcDeps): void {
   function handle<C extends InvokeChannel>(
     channel: C,
     parseArgs: ArgsParser<C>,
@@ -49,7 +52,13 @@ export function registerIpcHandlers({ devServerUrl, guard, scans }: IpcDeps): vo
     Promise.resolve(
       scans.start(request?.categories ?? [], {
         progress: (progress) => send(sender, 'scan:progress', progress),
-        done: (done) => send(sender, 'scan:done', done),
+        // Rule 6: items of a running app are flagged so the review leaves them unchecked.
+        done: (done) => {
+          void listRunningApps(runTool)
+            .then((apps) => annotateOpenApps(done, apps))
+            .catch(() => done)
+            .then((annotated) => send(sender, 'scan:done', annotated));
+        },
       }),
     ),
   );
