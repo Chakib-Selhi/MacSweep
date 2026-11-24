@@ -146,3 +146,44 @@ Lancée par `npm start`, l'app ouvrait parfois une fenêtre vide : la page et to
 En développement seulement, si `#root` est encore vide 1,5 s après le premier chargement, l'app recharge la page une fois et l'écrit dans le terminal (`[dev] page vide au premier chargement`). En développement toujours, les échecs de chargement, les erreurs HTTP et les erreurs ou avertissements de la console de la page sont recopiés dans le terminal de `npm start`.
 
 La directive `frame-ancestors` est retirée de la balise meta CSP, où les navigateurs l'ignorent ; elle reste dans l'en-tête HTTP du protocole `app://`.
+
+## Périmètre élargi (validé avec l'utilisateur le 24 novembre 2026)
+
+### D28. Un outil de type CleanMyMac, la suppression restant limitée à `~`
+
+L'utilisateur veut voir l'ensemble du Mac et choisir quoi supprimer par catégorie. Ce qui change par rapport au PRD :
+
+- **Affichage** : une vue « Exploration » montre l'occupation de **tout le disque**, en lecture seule. Les liens symboliques ne sont jamais suivis, et les dossiers refusés sont comptés comme ailleurs.
+- **Suppression** : inchangée. Seuls les chemins sous le dossier utilisateur peuvent aller à la Corbeille, sans `sudo` (règles 1, 2, 4 et 5 du PRD), à l'exception étroite de D29.
+- **Nouveaux modules** : carte du disque (avancée de v1.1), désinstallateur (avancé de v2), gros fichiers sur tout `~`, et catégories supplémentaires.
+
+Nouvelles catégories, toutes sous `~` :
+
+| Catégorie                              | Chemins                                                                                   | Risque                | Cochée par défaut                     |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------- | ------------------------------------- |
+| Mises à jour iOS téléchargées          | `~/Library/iTunes/*Software Updates`                                                      | Faible                | Oui                                   |
+| Caches des navigateurs                 | caches Safari, Chrome, Firefox, sortis des caches génériques                              | Faible                | Oui                                   |
+| Caches Xcode Previews et CoreSimulator | `~/Library/Developer/Xcode/UserData/Previews`, `~/Library/Developer/CoreSimulator/Caches` | Faible                | Oui                                   |
+| Caches pip, cargo, go                  | `~/Library/Caches/pip`, `~/.cargo/registry`, `~/go/pkg/mod`, `~/.cache`                   | Moyen                 | Non                                   |
+| Pièces jointes Mail téléchargées       | `~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads`                         | Moyen                 | Non                                   |
+| Sauvegardes iPhone et iPad             | `~/Library/Application Support/MobileSync/Backup`                                         | Élevé                 | Non, avec confirmation supplémentaire |
+| Image disque Docker                    | `~/Library/Containers/com.docker.docker/Data/vms`                                         | Information seulement | Jamais cochable                       |
+
+Jalons révisés :
+
+1. **M4. Nettoyage** : inchangé (F4, mode simulation, Corbeille, journal, historique).
+2. **M5. Gros fichiers, doublons, réglages et nouvelles catégories** : F5 sur tout `~`, F6, F7 et le tableau ci-dessus.
+3. **M6. Exploration du disque** : carte navigable de tout le disque, en lecture seule, avec suppression proposée seulement sous `~`.
+4. **M7. Désinstallateur** : une app et ses restes (caches, préférences, Application Support, conteneurs, agents de connexion de l'utilisateur), selon D29.
+5. **M8. Finition** : l'ancien M6 (Accès complet au disque, mode sombre, icône, `.dmg` signé en ad hoc, README).
+
+### D29. Exception pour désinstaller une app de `/Applications`
+
+`/Applications` reste dans la liste noire, avec une seule exception, réservée au désinstallateur (M7) : un bundle `.app` situé **directement** dans `/Applications` peut aller à la Corbeille si toutes ces conditions sont réunies :
+
+- il appartient à l'utilisateur courant (propriétaire du bundle) et n'est ni une app Apple (`com.apple.*`) ni une app de l'App Store (présence de `Contents/_MASReceipt`) ;
+- il n'est pas en cours d'exécution ;
+- l'utilisateur confirme explicitement, dans un dialogue qui nomme l'app ;
+- tout passe par `shell.trashItem`, sans `sudo`.
+
+Cette exception vit dans `guard.ts`, derrière un drapeau dédié que seul le canal de désinstallation peut transmettre. Elle sera couverte par des tests (app d'un autre propriétaire, app Apple, sous-dossier de `/Applications`, lien symbolique vers une app). Tout le reste de `/Applications` reste refusé.
