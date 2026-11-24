@@ -138,3 +138,11 @@ Quand `MACSWEEP_TEST_ROOT` est actif (app non empaquetée), l'app utilise un dos
 ### D26. Affichage des chemins
 
 Dans la revue, chaque élément montre son nom en clair et son dossier en dessous, la racine abrégée en `~`. Le chemin complet reste visible au survol.
+
+### D27. Fenêtre vide au premier chargement en développement
+
+Lancée par `npm start`, l'app ouvrait parfois une fenêtre vide : la page et tous ses modules étaient téléchargés depuis le serveur Vite, mais aucun module n'était exécuté, sans la moindre erreur. Un rechargement corrige toujours. Le même code lancé par Playwright s'affiche normalement, et l'app empaquetée (protocole `app://`) n'est pas concernée.
+
+En développement seulement, si `#root` est encore vide 1,5 s après le premier chargement, l'app recharge la page une fois et l'écrit dans le terminal (`[dev] page vide au premier chargement`). En développement toujours, les échecs de chargement, les erreurs HTTP et les erreurs ou avertissements de la console de la page sont recopiés dans le terminal de `npm start`.
+
+La directive `frame-ancestors` est retirée de la balise meta CSP, où les navigateurs l'ignorent ; elle reste dans l'en-tête HTTP du protocole `app://`.

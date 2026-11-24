@@ -3,12 +3,19 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
 import { DEV_CSP, PROD_CSP } from './src/main/csp.ts';
 
+// Browsers ignore frame-ancestors in a <meta> tag; the HTTP header of the app:// protocol keeps it.
+const forMeta = (policy: string) =>
+  policy
+    .split('; ')
+    .filter((directive) => !directive.startsWith('frame-ancestors'))
+    .join('; ');
+
 function cspMeta(): Plugin {
-  let csp = PROD_CSP;
+  let csp = forMeta(PROD_CSP);
   return {
     name: 'macsweep-csp-meta',
     configResolved(config) {
-      csp = config.command === 'serve' ? DEV_CSP : PROD_CSP;
+      csp = forMeta(config.command === 'serve' ? DEV_CSP : PROD_CSP);
     },
     transformIndexHtml() {
       return [

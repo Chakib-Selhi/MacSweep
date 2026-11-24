@@ -86,6 +86,51 @@ app.on('web-contents-created', (_event, contents) => {
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
 });
 
+/** Development only: what the page could not load or show ends up in the `npm start` terminal. */
+function logRendererProblems(window: BrowserWindow): void {
+  const { webContents } = window;
+  webContents.on('did-fail-load', (_event, code, description, url) => {
+    console.error(`[renderer] chargement échoué (${code} ${description}) : ${url}`);
+  });
+  webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[renderer] processus arrêté : ${details.reason}`);
+  });
+  webContents.on('console-message', (event) => {
+    if (event.level === 'error' || event.level === 'warning') {
+      console.error(`[renderer] ${event.message}`);
+    }
+  });
+  webContents.session.webRequest.onErrorOccurred((details) => {
+    console.error(`[renderer] requête en échec (${details.error}) : ${details.url}`);
+  });
+  webContents.session.webRequest.onCompleted((details) => {
+    if (details.statusCode >= 400) {
+      console.error(`[renderer] HTTP ${details.statusCode} : ${details.url}`);
+    }
+  });
+}
+
+/**
+ * Development only. When Electron Forge launches the app, the first load from the Vite dev server
+ * sometimes fetches every module but never runs them, leaving a blank window; a reload always
+ * works. The packaged app (app:// protocol) is not affected.
+ */
+function reloadIfFirstLoadStaysBlank(window: BrowserWindow): void {
+  window.webContents.once('did-finish-load', () => {
+    setTimeout(() => {
+      if (window.isDestroyed()) return;
+      void window.webContents
+        .executeJavaScript("document.getElementById('root')?.childElementCount ?? 0")
+        .then((children: number) => {
+          if (children > 0) return;
+          console.warn('[dev] page vide au premier chargement : rechargement');
+          window.webContents.reload();
+        })
+        .catch(() => undefined);
+    }, 1500);
+  });
+}
+
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1100,
@@ -110,6 +155,8 @@ function createMainWindow(): BrowserWindow {
   });
 
   window.once('ready-to-show', () => window.show());
+  if (!app.isPackaged) logRendererProblems(window);
+  if (devServerUrl) reloadIfFirstLoadStaysBlank(window);
   void window.loadURL(devServerUrl ?? APP_ENTRY_URL);
   return window;
 }
