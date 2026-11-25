@@ -195,6 +195,7 @@ export async function planCategory(id: CategoryId, ctx: PlanContext): Promise<Ca
       return pathsPlan(id, [home('Library/Containers/com.docker.docker/Data/vms')]);
     case 'large-files':
     case 'duplicates':
+    case 'explorer':
       // Walked by the engine itself, see large-files.ts and duplicates.ts.
       return null;
   }

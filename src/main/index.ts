@@ -12,7 +12,8 @@ import {
   resolveRendererFile,
 } from './origins';
 import { createGuard } from './safety/guard';
-import { pickRoot, TEST_ROOT_ENV } from './safety/root';
+import { pickDiskRoot, pickRoot, TEST_ROOT_ENV } from './safety/root';
+import { ExploreService } from './scanner/explore-service';
 import { ScanService } from './scanner/service';
 import { createToolDeps } from './scanner/tools';
 import { createJournal } from './journal';
@@ -180,8 +181,19 @@ async function start(): Promise<void> {
       duplicateMinBytes: settings.duplicateMinBytes,
     };
   });
-  app.on('before-quit', () => scans.dispose());
   const testMode = !app.isPackaged && process.env[TEST_ROOT_ENV] !== undefined;
+  const explore = new ExploreService(scanWorkerPath, {
+    roots: {
+      home: guard.root,
+      disk: await pickDiskRoot({ root: guard.root, tmpdir: os.tmpdir(), testMode }),
+    },
+    homePath: guard.root,
+    exclusions: () => store.getSettings().exclusions,
+  });
+  app.on('before-quit', () => {
+    scans.dispose();
+    explore.dispose();
+  });
 
   hardenSession(session.defaultSession);
   registerAppProtocol();
@@ -189,6 +201,7 @@ async function start(): Promise<void> {
     devServerUrl,
     guard,
     scans,
+    explore,
     registry: new ScanRegistry(),
     store,
     journal: createJournal(path.join(app.getPath('userData'), 'logs')),

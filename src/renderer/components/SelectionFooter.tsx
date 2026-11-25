@@ -3,13 +3,20 @@ import { formatBytes } from '../format';
 import { useScan } from '../scan/ScanContext';
 import type { SelectionDetails } from '../scan/selection';
 import { strings } from '../strings';
-import { CleanDialog } from './CleanDialog';
+import type { CleanReport } from '../../shared/types';
+import { CleanDialog, type CleanAction } from './CleanDialog';
 import { buttonStyles } from './ui';
 
 const numberFormat = new Intl.NumberFormat('fr-FR');
 
 /** Selected total, simulation switch and clean button, shared by every screen that cleans. */
-export function SelectionFooter({ details }: { details: SelectionDetails }) {
+interface SelectionFooterProps {
+  details: SelectionDetails;
+  execute?: CleanAction;
+  onReport?: (report: CleanReport) => void;
+}
+
+export function SelectionFooter({ details, execute, onReport }: SelectionFooterProps) {
   const { dryRun, setDryRun } = useScan();
   const [open, setOpen] = useState(false);
 
@@ -46,7 +53,14 @@ export function SelectionFooter({ details }: { details: SelectionDetails }) {
           {strings.review.clean}
         </button>
       </div>
-      {open && <CleanDialog details={details} onClose={() => setOpen(false)} />}
+      {open && (
+        <CleanDialog
+          details={details}
+          onClose={() => setOpen(false)}
+          {...(execute ? { execute } : {})}
+          {...(onReport ? { onReport } : {})}
+        />
+      )}
     </footer>
   );
 }

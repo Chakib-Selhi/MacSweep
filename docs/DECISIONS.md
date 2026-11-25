@@ -278,3 +278,16 @@ Affichée pour expliquer où part l'espace, jamais cochable, et refusée par le 
 ### D44. Nouvelles catégories et apps ouvertes
 
 Les caches de navigateurs, les caches Xcode et les pièces jointes Mail sont rattachés à leur app pour la règle 6 : Safari, Chrome, Firefox, Edge, Brave et Arc ; Xcode ; Mail. Les caches de navigateurs, `pip` et les autres dossiers déjà couverts par une catégorie sont retirés des caches utilisateur, pour ne pas compter deux fois les mêmes octets.
+
+### D45. Exploration du disque (M6)
+
+- **Parcours** : dans le worker du scan (même fichier, deux tâches), comme `du` : blocs alloués, liens symboliques jamais suivis, liens durs comptés une fois. Chaque dossier est gardé, avec ses 50 plus gros fichiers ; les autres sont regroupés en un seul élément « N autres fichiers ».
+- **Sur `/`** : `/System/Volumes` (les firmlinks APFS montrent les mêmes données sous `/Users`, `/private`…), `/Volumes`, `/dev`, `/net`, `/home` et `/Network` ne sont pas parcourus, pour ne rien compter deux fois ni lire d'autres disques. Les exclusions des Réglages sont aussi sautées. Les dossiers protégés de la liste noire (Mail, Messages…) sont mesurés en lecture seule quand macOS le permet.
+- **Lecture** : la carte n'est consultée qu'en mémoire, dans le processus principal. Chaque chemin reçu par `explore:list` passe par `browsablePath` (`guard.ts`) : absolu, sans `.` ni `..`, sous le dossier exploré.
+- **Suppression depuis la carte** : seulement sous `~`, et pas dans `~/Library`, les éléments cachés ni les apps (`.app`) : refus `read-only` (`exploreTrashRefusal`, `guard.ts`). Ces zones relèvent des catégories et du désinstallateur, qui vérifient les apps ouvertes (règle 6), ce que la carte ne sait pas faire pour un chemin quelconque. Tout passe par le même nettoyeur que les scans (garde, simulation, Corbeille, journal, historique). Seul ce que la carte montre peut être nettoyé, ni la racine ni un dossier illisible, et toujours avec la confirmation du risque élevé (catégorie `explorer`).
+- **Exploration annulée ou échouée** : aucune carte n'est gardée, pour ne jamais montrer des tailles partielles.
+- **Tests** : « Tout le disque » explore le dossier parent de la racine de test quand il est encore dans le dossier temporaire ; la règle 5 reste respectée.
+
+### D46. Coût de l'exploration de tout le disque
+
+Mesure sur le Mac de développement : 1,9 million d'entrées en 71 s (cache froid), environ 250 Mo de mémoire dans le worker et 1,4 million de nœuds. L'arbre est envoyé au processus principal en tableaux typés transférés (sans copie), et l'index des enfants se construit en 20 ms. Une seule exploration à la fois. Aucun nettoyage n'est accepté pendant qu'elle tourne.

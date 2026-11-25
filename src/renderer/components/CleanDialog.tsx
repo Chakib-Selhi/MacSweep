@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { CleanProgress, CleanReport } from '../../shared/types';
+import type { CleanProgress, CleanReport, CleanRequest } from '../../shared/types';
 import { formatBytes, splitPath } from '../format';
 import { useScan } from '../scan/ScanContext';
 import type { SelectionDetails } from '../scan/selection';
@@ -13,15 +13,20 @@ type Step =
   | { kind: 'done'; report: CleanReport }
   | { kind: 'error' };
 
+export type CleanAction = (paths: string[], request: CleanRequest) => Promise<CleanReport>;
+
 interface CleanDialogProps {
   details: SelectionDetails;
   onClose: () => void;
+  /** The disk map cleans through its own channel; the scan screens use clean.execute. */
+  execute?: CleanAction;
+  onReport?: (report: CleanReport) => void;
 }
 
 const numberFormat = new Intl.NumberFormat('fr-FR');
 
 /** Mounted only while open, so every opening starts fresh at the confirmation step. */
-export function CleanDialog({ details, onClose }: CleanDialogProps) {
+export function CleanDialog({ details, onClose, execute, onReport }: CleanDialogProps) {
   const { paths, totalBytes, shares, protectedCount, highRisk } = details;
   const { dryRun, applyCleanReport, result } = useScan();
   const [step, setStep] = useState<Step>({ kind: 'confirm' });
@@ -43,12 +48,15 @@ export function CleanDialog({ details, onClose }: CleanDialogProps) {
   async function run() {
     setStep({ kind: 'running' });
     try {
-      const report = await window.macsweep.clean.execute(paths, {
+      const action: CleanAction =
+        execute ?? ((list, request) => window.macsweep.clean.execute(list, request));
+      const report = await action(paths, {
         dryRun,
         confirmProtected: protectedConfirmed,
         confirmHighRisk: highRiskConfirmed,
       });
       applyCleanReport(report);
+      onReport?.(report);
       setStep({ kind: 'done', report });
     } catch {
       setStep({ kind: 'error' });

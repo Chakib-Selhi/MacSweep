@@ -6,6 +6,7 @@ import {
   expectSingleString,
   IpcValidationError,
   parseCleanArgs,
+  parseExploreScope,
   parseScanArgs,
   parseSettingsPatch,
 } from '../../src/main/ipc-validation';
@@ -151,5 +152,16 @@ describe('parseSettingsPatch : réglages F7', () => {
     [{ __proto__: { dryRun: false } }],
   ])('refuse %j', (patch) => {
     expect(() => parseSettingsPatch([patch])).toThrow(IpcValidationError);
+  });
+});
+
+describe('parseExploreScope', () => {
+  it('accepte les deux portées', () => {
+    expect(parseExploreScope(['home'])).toEqual(['home']);
+    expect(parseExploreScope(['disk'])).toEqual(['disk']);
+  });
+
+  it.each([[[]], [['/']], [['home', 'disk']], [[{ scope: 'disk' }]]])('refuse %j', (raw) => {
+    expect(() => parseExploreScope(raw)).toThrow();
   });
 });

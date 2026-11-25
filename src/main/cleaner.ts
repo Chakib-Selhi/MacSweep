@@ -1,13 +1,28 @@
 import { CATEGORY_META } from '../shared/categories';
-import type { CleanFailure, CleanProgress, CleanReport, CleanedItem } from '../shared/types';
+import type {
+  CleanFailure,
+  CleanFailureReason,
+  CleanProgress,
+  CleanReport,
+  CleanedItem,
+} from '../shared/types';
 import type { Journal } from './journal';
 import { canBelongToApp, findOpenApp, type RunningApp } from './running-apps';
 import { GuardInputError, type Guard } from './safety/guard';
-import type { ScanRegistry } from './scan-registry';
+import type { RegisteredItem } from './scan-registry';
+
+/** What a clean may touch: the latest scan, or the latest disk map. */
+export interface CleanRegistry {
+  get(path: string): RegisteredItem | undefined;
+  groupSize(groupId: string): number;
+  forget(path: string): void;
+}
 
 export interface CleanDeps {
   guard: Guard;
-  registry: ScanRegistry;
+  registry: CleanRegistry;
+  /** A further rule for this source, checked right after the guard (the disk map's read-only parts). */
+  extraRefusal?(path: string): CleanFailureReason | null;
   /** shell.trashItem in the app; a move into a test Trash during automated tests. */
   moveToTrash(path: string): Promise<void>;
   listRunningApps(): Promise<RunningApp[]>;
@@ -73,6 +88,11 @@ export async function cleanPaths(
     const target = checked.path;
     if (handled.has(target)) continue;
     handled.add(target);
+    const extra = deps.extraRefusal?.(target) ?? null;
+    if (extra) {
+      failed.push({ path: target, reason: extra });
+      continue;
+    }
     if (deps.exclusions?.some((dir) => target === dir || target.startsWith(`${dir}/`))) {
       failed.push({ path: target, reason: 'excluded' });
       continue;

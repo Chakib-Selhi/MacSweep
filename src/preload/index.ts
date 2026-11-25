@@ -58,6 +58,14 @@ const api: MacSweepApi = {
   dialog: {
     pickFolder: () => invoke('dialog:pickFolder'),
   },
+  explore: {
+    start: (scope) => invoke('explore:start', scope),
+    cancel: (exploreId) => invoke('explore:cancel', exploreId),
+    list: (path) => invoke('explore:list', path),
+    trash: (paths, request) => invoke('explore:trash', paths, request),
+    onProgress: (listener) => subscribe('explore:progress', listener),
+    onDone: (listener) => subscribe('explore:done', listener),
+  },
 };
 
 contextBridge.exposeInMainWorld('macsweep', api);

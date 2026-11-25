@@ -1,6 +1,7 @@
 import { CATEGORY_IDS, isCategoryId, type CategoryId } from '../shared/categories';
 import type {
   CleanRequest,
+  ExploreScope,
   InvokeArgs,
   InvokeChannel,
   ScanRequest,
@@ -44,6 +45,14 @@ export function expectScanId(raw: readonly unknown[]): [string] {
   const [scanId] = expectSingleString(raw);
   if (!SCAN_ID.test(scanId)) fail('Identifiant de scan invalide');
   return [scanId];
+}
+
+export function parseExploreScope(raw: readonly unknown[]): [ExploreScope] {
+  const [scope] = raw;
+  if (raw.length !== 1 || (scope !== 'home' && scope !== 'disk')) {
+    fail('La portée doit être « home » ou « disk »');
+  }
+  return [scope];
 }
 
 const ALL_CATEGORIES = (): CategoryId[] => [...CATEGORY_IDS];

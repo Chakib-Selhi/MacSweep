@@ -6,6 +6,7 @@ export const strings = {
   nav: {
     label: 'Navigation principale',
     dashboard: 'Tableau de bord',
+    explorer: 'Exploration',
     largeFiles: 'Gros fichiers',
     duplicates: 'Doublons',
     history: 'Historique',
@@ -111,6 +112,7 @@ export const strings = {
       git: 'dépôt git',
       trash: 'dans la Corbeille',
       'broken-symlink': 'lien cassé',
+      'read-only': 'en lecture seule dans l’exploration',
       'not-scanned': 'absent du dernier scan',
       'app-open': 'app ouverte',
       'app-check-failed': 'impossible de vérifier les apps ouvertes',
@@ -124,6 +126,43 @@ export const strings = {
       `Je confirme : ${count} élément${count === '1' ? ' est situé' : 's sont situés'} dans Documents, Bureau ou Images.`,
     confirmHighRisk:
       'Je confirme : cette sélection contient des éléments à risque élevé (gros fichiers, doublons ou sauvegardes d’appareils).',
+  },
+  explore: {
+    title: 'Exploration du disque',
+    intro:
+      'Ce qui occupe l’espace, dossier par dossier. Hors de ton dossier utilisateur, tout reste en lecture seule.',
+    scopeLabel: 'Portée',
+    scopes: { home: 'Mon dossier', disk: 'Tout le disque' },
+    start: 'Explorer',
+    restart: 'Relancer',
+    cancel: 'Annuler',
+    running: (files: string, size: string) => `Exploration : ${files} éléments, ${size}…`,
+    status: {
+      completed: 'Exploration terminée',
+      cancelled: 'Exploration annulée : relance-la pour voir la carte',
+      failed: 'L’exploration a échoué',
+    } satisfies Record<ScanStatus, string>,
+    summary: (size: string, files: string, duration: string) =>
+      `${size} dans ${files} fichiers, analysés en ${duration}.`,
+    denied: (count: number) =>
+      `${count} dossier${count > 1 ? 's' : ''} illisible${count > 1 ? 's' : ''}, compté${count > 1 ? 's' : ''} pour ce qui a pu être lu.`,
+    hidden: (size: string) =>
+      `${size} utilisés ne sont pas visibles ici : instantanés APFS, volumes système, espace purgeable et dossiers illisibles.`,
+    startError: 'L’exploration n’a pas pu démarrer.',
+    breadcrumb: 'Chemin',
+    up: 'Dossier parent',
+    open: (name: string) => `Ouvrir ${name}`,
+    select: (name: string) => `Sélectionner ${name}`,
+    others: (count: string) => `${count} autres fichiers`,
+    readOnly: 'Lecture seule',
+    readOnlyHint:
+      'Hors du dossier utilisateur, dans ~/Library, caché ou dans une app : pas de suppression depuis la carte.',
+    denied1: 'Illisible',
+    protectedBadge: 'Documents, Bureau ou Images',
+    files: (count: string) => `${count} fichier${count === '0' || count === '1' ? '' : 's'}`,
+    empty: 'Ce dossier est vide.',
+    gone: 'Ce dossier n’est plus dans la carte. Relance l’exploration.',
+    mapLabel: 'Carte du dossier',
   },
   largeFiles: {
     title: 'Gros fichiers',
@@ -235,5 +274,6 @@ export const strings = {
     'docker-data': 'Image disque Docker',
     'large-files': 'Gros fichiers',
     duplicates: 'Doublons',
+    explorer: 'Exploration du disque',
   } satisfies Record<CategoryId, string>,
 } as const;

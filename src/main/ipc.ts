@@ -2,19 +2,22 @@ import { BrowserWindow, dialog, ipcMain, shell, type WebContents } from 'electro
 import { randomUUID } from 'node:crypto';
 import type { CategoryId } from '../shared/categories';
 import type {
+  CleanProgress,
+  CleanReport,
   EventChannel,
   EventContract,
   InvokeArgs,
   InvokeChannel,
   InvokeResult,
 } from '../shared/types';
-import { cleanPaths } from './cleaner';
+import { cleanPaths, type CleanOptions } from './cleaner';
 import { readDiskInfo } from './disk';
 import {
   expectNoArgs,
   expectScanId,
   expectSingleString,
   parseCleanArgs,
+  parseExploreScope,
   parseScanArgs,
   parseSettingsPatch,
   type ArgsParser,
@@ -22,8 +25,10 @@ import {
 import type { Journal } from './journal';
 import { isTrustedSenderUrl } from './origins';
 import { annotateOpenApps, listRunningApps } from './running-apps';
-import type { Guard } from './safety/guard';
+import { browsablePath, exploreTrashRefusal, type Guard } from './safety/guard';
 import type { ScanRegistry } from './scan-registry';
+import { exploreRegistry } from './scanner/explore';
+import type { ExploreService } from './scanner/explore-service';
 import type { ScanService } from './scanner/service';
 import type { ToolRunner } from './scanner/tools';
 import type { AppStore } from './store';
@@ -34,6 +39,7 @@ interface IpcDeps {
   devServerUrl: string | undefined;
   guard: Guard;
   scans: ScanService;
+  explore: ExploreService;
   registry: ScanRegistry;
   store: AppStore;
   journal: Journal;
@@ -46,7 +52,8 @@ function send<C extends EventChannel>(target: WebContents, channel: C, payload: 
 }
 
 export function registerIpcHandlers(deps: IpcDeps): void {
-  const { devServerUrl, guard, scans, registry, store, journal, moveToTrash, runTool } = deps;
+  const { devServerUrl, guard, scans, explore, registry, store, journal, moveToTrash, runTool } =
+    deps;
   let busyCleaning = false;
 
   function handle<C extends InvokeChannel>(
@@ -66,6 +73,7 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   /** One disk-changing operation at a time, never during a scan. */
   async function exclusive<T>(task: () => Promise<T>): Promise<T> {
     if (scans.isRunning) throw new Error('Un scan est en cours');
+    if (explore.isRunning) throw new Error('Une exploration est en cours');
     if (busyCleaning) throw new Error('Un nettoyage est déjà en cours');
     busyCleaning = true;
     try {
@@ -73,6 +81,31 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     } finally {
       busyCleaning = false;
     }
+  }
+
+  function cleanDeps(sender: WebContents) {
+    return {
+      guard,
+      moveToTrash,
+      listRunningApps: () => listRunningApps(runTool),
+      journal,
+      exclusions: store.getSettings().exclusions,
+      onProgress: (progress: CleanProgress) => send(sender, 'clean:progress', progress),
+      now: () => Date.now(),
+    };
+  }
+
+  function recordClean(report: CleanReport): void {
+    if (report.dryRun || report.moved.length === 0) return;
+    store.addHistory({
+      id: randomUUID(),
+      dateMs: Date.now(),
+      kind: 'clean',
+      categories: [...new Set<CategoryId>(report.moved.map((item) => item.categoryId))],
+      bytesFreed: report.bytesFreed,
+      movedCount: report.moved.length,
+      failedCount: report.failed.length,
+    });
   }
 
   handle('disk:info', expectNoArgs, () => readDiskInfo(guard.root));
@@ -103,8 +136,17 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   handle('fs:reveal', expectSingleString, async (_sender, input) => {
     const result = await guard.checkReadable(input);
-    if (!result.ok) throw new Error(`Chemin refusé (${result.reason})`);
-    shell.showItemInFolder(result.path);
+    if (result.ok) {
+      shell.showItemInFolder(result.path);
+      return;
+    }
+    // Showing in the Finder is read-only: anything the disk map lists may be shown.
+    const tree = explore.current;
+    const browsable = tree ? browsablePath(input, tree.rootPath) : null;
+    if (!tree || !browsable?.ok || !tree.get(browsable.path)) {
+      throw new Error(`Chemin refusé (${result.reason})`);
+    }
+    shell.showItemInFolder(browsable.path);
   });
 
   handle('clean:execute', parseCleanArgs, (sender, paths, request) =>
@@ -113,26 +155,64 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       const dryRun = store.getSettings().dryRun || request.dryRun;
       const options = { ...request, dryRun };
       const report = await cleanPaths(paths, options, {
-        guard,
+        ...cleanDeps(sender),
         registry,
         moveToTrash,
-        listRunningApps: () => listRunningApps(runTool),
-        journal,
-        exclusions: store.getSettings().exclusions,
-        onProgress: (progress) => send(sender, 'clean:progress', progress),
-        now: () => Date.now(),
       });
-      if (!report.dryRun && report.moved.length > 0) {
-        store.addHistory({
-          id: randomUUID(),
-          dateMs: Date.now(),
-          kind: 'clean',
-          categories: [...new Set<CategoryId>(report.moved.map((item) => item.categoryId))],
-          bytesFreed: report.bytesFreed,
-          movedCount: report.moved.length,
-          failedCount: report.failed.length,
-        });
+      if (!report.dryRun) for (const item of report.moved) explore.current?.forget(item.path);
+      recordClean(report);
+      return report;
+    }),
+  );
+
+  handle('explore:start', parseExploreScope, (sender, scope) => {
+    if (busyCleaning) return Promise.reject(new Error('Un nettoyage est en cours'));
+    return Promise.resolve(
+      explore.start(scope, {
+        progress: (progress) => send(sender, 'explore:progress', progress),
+        done: (done) => send(sender, 'explore:done', done),
+      }),
+    );
+  });
+
+  handle('explore:cancel', expectScanId, (_sender, exploreId) => {
+    explore.cancel(exploreId);
+    return Promise.resolve();
+  });
+
+  handle('explore:list', expectSingleString, (_sender, input) => {
+    const tree = explore.current;
+    if (!tree) return Promise.resolve(null);
+    const checked = browsablePath(input, tree.rootPath);
+    if (!checked.ok) return Promise.reject(new Error(`Chemin refusé (${checked.reason})`));
+    const listing = tree.list(checked.path);
+    if (!listing) return Promise.resolve(null);
+    for (const entry of listing.entries) {
+      if (entry.kind === 'others' || entry.denied) continue;
+      const roots = [guard.root];
+      entry.trashable = exploreTrashRefusal(entry.path, roots, { confirmProtected: true }) === null;
+      if (entry.trashable && exploreTrashRefusal(entry.path, roots) === 'protected') {
+        entry.protected = true;
       }
+    }
+    return Promise.resolve(listing);
+  });
+
+  handle('explore:trash', parseCleanArgs, (sender, paths, request) =>
+    exclusive(async () => {
+      const tree = explore.current;
+      if (!tree) throw new Error('Aucune exploration terminée');
+      const dryRun = store.getSettings().dryRun || request.dryRun;
+      const options: CleanOptions = { ...request, dryRun };
+      const report = await cleanPaths(paths, options, {
+        ...cleanDeps(sender),
+        registry: exploreRegistry(tree),
+        // The guard has already asked for the Documents confirmation; this adds D45's rules.
+        extraRefusal: (target) =>
+          exploreTrashRefusal(target, [guard.root], { confirmProtected: true }),
+      });
+      if (!report.dryRun) for (const item of report.moved) registry.forget(item.path);
+      recordClean(report);
       return report;
     }),
   );

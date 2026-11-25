@@ -99,6 +99,40 @@ export function isBlacklisted(absolutePath: string, root: string): boolean {
   return FORBIDDEN_SEGMENTS.some((forbidden) => startsWith(relative, forbidden));
 }
 
+const LIBRARY_KEY = key('Library');
+
+/**
+ * Exploration (D45): what may go to the Trash from the disk map. On top of classifyPath,
+ * ~/Library, hidden items and app bundles stay read-only: the categories and the uninstaller
+ * clean them with their own checks (open apps, leftovers).
+ */
+export function exploreTrashRefusal(
+  absolutePath: string,
+  roots: readonly string[],
+  options: TrashOptions = {},
+): Refusal | null {
+  const refusal = classifyPath(absolutePath, roots, options);
+  if (refusal) return refusal;
+  const target = segments(absolutePath);
+  const rootSegments = roots.map(segments).find((root) => startsWith(target, root)) ?? [];
+  const relative = target.slice(rootSegments.length);
+  if (relative[0] === LIBRARY_KEY) return 'read-only';
+  if (relative.some((segment) => segment.startsWith('.') || segment.endsWith('.app'))) {
+    return 'read-only';
+  }
+  return null;
+}
+
+/** Exploration: a path the disk map may show, which must lie under the explored folder. */
+export function browsablePath(input: unknown, base: string): GuardResult {
+  const normalized = normalizeInput(input);
+  if (!normalized) return refuse('invalid-input');
+  if (base === '/' || normalized === base || normalized.startsWith(`${base}/`)) {
+    return { ok: true, path: normalized };
+  }
+  return refuse('outside-root');
+}
+
 function normalizeInput(input: unknown): string | null {
   if (typeof input !== 'string') return null;
   if (input.length === 0 || input.length > MAX_PATH_LENGTH || input.includes('\0')) return null;

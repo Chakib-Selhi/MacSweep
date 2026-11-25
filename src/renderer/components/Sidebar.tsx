@@ -1,8 +1,16 @@
 import { strings } from '../strings';
 
-export type PageId = 'dashboard' | 'largeFiles' | 'duplicates' | 'history' | 'settings';
+export type PageId =
+  'dashboard' | 'explorer' | 'largeFiles' | 'duplicates' | 'history' | 'settings';
 
-const PAGES: readonly PageId[] = ['dashboard', 'largeFiles', 'duplicates', 'history', 'settings'];
+const PAGES: readonly PageId[] = [
+  'dashboard',
+  'explorer',
+  'largeFiles',
+  'duplicates',
+  'history',
+  'settings',
+];
 
 interface SidebarProps {
   current: PageId;

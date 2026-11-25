@@ -78,7 +78,9 @@ export type GuardRefusal =
   | 'protected'
   | 'git'
   | 'trash'
-  | 'broken-symlink';
+  | 'broken-symlink'
+  /** Shown by the disk map but never cleaned from it (D45). */
+  | 'read-only';
 
 export type CleanFailureReason =
   | GuardRefusal
@@ -166,6 +168,54 @@ export interface HistoryEntry {
   failedCount: number;
 }
 
+/** « Mon dossier » (the home folder) or « Tout le disque » (`/`, read-only outside home). */
+export type ExploreScope = 'home' | 'disk';
+
+export interface ExploreEntry {
+  /** `others`: the smaller files of the folder, grouped; its path is the folder's. */
+  kind: 'directory' | 'file' | 'others';
+  name: string;
+  path: string;
+  sizeBytes: number;
+  fileCount: number;
+  /** The folder could not be read: its size is what could be counted. */
+  denied: boolean;
+  /** Can go to the Trash from the disk map (D45); always false outside the home folder. */
+  trashable: boolean;
+  /** Inside Documents, Desktop or Pictures: trashing it needs the extra confirmation. */
+  protected?: boolean;
+}
+
+export interface ExploreListing {
+  path: string;
+  sizeBytes: number;
+  fileCount: number;
+  denied: boolean;
+  entries: ExploreEntry[];
+}
+
+export interface ExploreProgress {
+  exploreId: string;
+  filesVisited: number;
+  bytesFound: number;
+  currentDir: string;
+}
+
+export interface ExploreDone {
+  exploreId: string;
+  status: ScanStatus;
+  scope: ExploreScope;
+  /** The explored folder; the map can be browsed from here down. */
+  rootPath: string;
+  /** The home folder: only items under it can be offered for the Trash. */
+  homePath: string;
+  sizeBytes: number;
+  fileCount: number;
+  deniedCount: number;
+  durationMs: number;
+  error?: string;
+}
+
 export interface InvokeContract {
   'disk:info': { args: []; result: DiskInfo };
   'scan:start': { args: [request?: ScanRequest]; result: string };
@@ -178,12 +228,19 @@ export interface InvokeContract {
   'history:list': { args: []; result: HistoryEntry[] };
   /** Native folder picker; resolves to a folder inside the home folder, or null if cancelled. */
   'dialog:pickFolder': { args: []; result: string | null };
+  'explore:start': { args: [scope: ExploreScope]; result: string };
+  'explore:cancel': { args: [exploreId: string]; result: void };
+  /** null when the path is not part of the latest exploration. */
+  'explore:list': { args: [path: string]; result: ExploreListing | null };
+  'explore:trash': { args: [paths: string[], request: CleanRequest]; result: CleanReport };
 }
 
 export interface EventContract {
   'scan:progress': ScanProgress;
   'scan:done': ScanDone;
   'clean:progress': CleanProgress;
+  'explore:progress': ExploreProgress;
+  'explore:done': ExploreDone;
 }
 
 export type InvokeChannel = keyof InvokeContract;
@@ -223,5 +280,13 @@ export interface MacSweepApi {
   };
   dialog: {
     pickFolder(): Promise<string | null>;
+  };
+  explore: {
+    start(scope: ExploreScope): Promise<string>;
+    cancel(exploreId: string): Promise<void>;
+    list(path: string): Promise<ExploreListing | null>;
+    trash(paths: string[], request: CleanRequest): Promise<CleanReport>;
+    onProgress(listener: (progress: ExploreProgress) => void): Unsubscribe;
+    onDone(listener: (done: ExploreDone) => void): Unsubscribe;
   };
 }

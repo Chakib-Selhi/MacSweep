@@ -32,3 +32,22 @@ export async function pickRoot({
   }
   return realOverride;
 }
+
+/**
+ * The folder « Tout le disque » explores: `/` in the app. For automated tests, the parent of the
+ * test root when it still lies inside the temporary directory, so nothing outside it is read.
+ */
+export async function pickDiskRoot({
+  root,
+  tmpdir,
+  testMode,
+}: {
+  root: string;
+  tmpdir: string;
+  testMode: boolean;
+}): Promise<string> {
+  if (!testMode) return '/';
+  const realTmp = await realpath(tmpdir);
+  const parent = path.dirname(root);
+  return parent.startsWith(realTmp + path.sep) ? parent : root;
+}

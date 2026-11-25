@@ -68,6 +68,14 @@ Les éléments vont dans la Corbeille macOS : tu peux les remettre en place depu
 
 Chaque déplacement est noté dans `~/Library/Application Support/MacSweep/logs/` (une ligne par élément : date, chemin d'origine, taille). L'écran Historique résume les nettoyages réels.
 
+## Explorer le disque
+
+L'écran **Exploration** montre ce qui occupe l'espace, dossier par dossier, sous forme de carte (treemap) et de liste triée par taille. Clique sur un dossier pour y entrer, et sur le fil d'Ariane pour remonter.
+
+- **Mon dossier** explore `~`. **Tout le disque** explore `/`, sans les vues en double d'APFS (`/System/Volumes`), ni `/Volumes` et les montages réseau. Une exploration complète prend environ une minute.
+- Tout est en **lecture seule**, sauf les éléments de ton dossier utilisateur hors `~/Library`, hors éléments cachés et hors apps (`.app`). Ceux-là peuvent aller à la Corbeille avec la confirmation du risque élevé.
+- L'écart entre l'espace utilisé et ce que montre la carte vient des instantanés APFS, des volumes système, de l'espace purgeable et des dossiers illisibles.
+
 ## Activer l'Accès complet au disque
 
 Sans cet accès, certains dossiers de `~/Library` sont illisibles. MacSweep fonctionne quand même et affiche le nombre de dossiers inaccessibles.
