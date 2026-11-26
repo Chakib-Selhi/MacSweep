@@ -6,7 +6,7 @@
   "type": "module",
   "description": "Nettoyeur de Mac local et prudent : scanne le disque et met les fichiers encombrants à la Corbeille.",
   "keywords": [],
-  "license": "UNLICENSED",
+  "license": "MIT",
   "author": {
     "name": "Chakib Selhi"
   },

@@ -14,6 +14,7 @@
   <img alt="Electron" src="https://img.shields.io/badge/Electron-45-47848F?logo=electron&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" />
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white" />
+  <img alt="Licence MIT" src="https://img.shields.io/badge/licence-MIT-blue" />
   <img alt="Tests" src="https://img.shields.io/badge/tests-367%20unitaires%20%C2%B7%2038%20e2e-2ea44f" />
 </p>
 
@@ -33,6 +34,7 @@ Aucun compte, aucune requête réseau, aucune télémétrie. Tout se passe sur t
 - [Développer](#développer)
 - [Architecture](#architecture)
 - [Limites connues](#limites-connues)
+- [Licence](#licence)
 
 ## Fonctionnalités
 
@@ -228,3 +230,7 @@ Pile technique :
 - **Copies APFS** : MacSweep ne détecte pas les clones APFS. L'espace récupérable des doublons peut donc être surestimé.
 - **Agents de connexion** : un agent désinstallé n'est pas arrêté sur-le-champ, mais au prochain démarrage de session.
 - **Accès complet au disque** : sans lui, les dossiers protégés sont seulement comptés comme illisibles.
+
+## Licence
+
+MacSweep est distribué sous licence [MIT](LICENSE). Le logiciel est fourni tel quel, sans garantie : vérifie toujours ce que tu mets à la Corbeille.
