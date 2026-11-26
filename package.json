@@ -8,8 +8,7 @@
   "keywords": [],
   "license": "UNLICENSED",
   "author": {
-    "name": "Chakib Selhi",
-    "email": "chakibselhi@gmail.com"
+    "name": "Chakib Selhi"
   },
   "main": ".vite/build/main.cjs",
   "scripts": {
