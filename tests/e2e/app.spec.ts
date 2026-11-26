@@ -62,6 +62,7 @@ test("l'interface n'a pas accès à Node", async () => {
       'history',
       'dialog',
       'explore',
+      'access',
       'apps',
     ],
   });

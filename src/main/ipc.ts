@@ -14,6 +14,7 @@ import type {
 } from '../shared/types';
 import { cleanPaths, type CleanOptions } from './cleaner';
 import { readDiskInfo } from './disk';
+import { checkFullDiskAccess, FULL_DISK_ACCESS_SETTINGS } from './disk-access';
 import {
   expectNoArgs,
   expectScanId,
@@ -265,6 +266,9 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       return report;
     }),
   );
+
+  handle('access:status', expectNoArgs, () => checkFullDiskAccess(guard.root));
+  handle('access:openSettings', expectNoArgs, () => shell.openExternal(FULL_DISK_ACCESS_SETTINGS));
 
   handle('apps:list', expectNoArgs, async () => {
     const bundles = await listAppBundles(apps.dirs, (appPath) => apps.readBundleId(appPath));

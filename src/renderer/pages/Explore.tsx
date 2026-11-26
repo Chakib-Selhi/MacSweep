@@ -341,7 +341,7 @@ function FolderMap({
       aria-hidden="true"
       data-testid="explore-map"
       title={strings.explore.mapLabel}
-      className="h-64"
+      className="h-64 text-white dark:text-neutral-900"
     >
       <ResponsiveContainer width="100%" height="100%">
         <Treemap
@@ -371,7 +371,7 @@ function Tile(node: TreemapNode) {
         width={width}
         height={height}
         fill={fill}
-        stroke="#fff"
+        stroke="currentColor"
         strokeWidth={2}
         rx={3}
       />

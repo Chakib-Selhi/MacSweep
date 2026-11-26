@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CATEGORY_META, type CategoryPage } from '../../shared/categories';
 import type { DiskInfo, ScanDone, ScanProgress } from '../../shared/types';
 import { CategoryChart } from '../components/CategoryChart';
+import { DiskAccessBanner } from '../components/DiskAccessBanner';
 import { RiskBadge } from '../components/RiskBadge';
 import { buttonStyles, cardStyle } from '../components/ui';
 import { formatBytes, formatDuration, percentOf } from '../format';
@@ -28,6 +29,7 @@ export function Dashboard({ onReview, onOpenPage }: DashboardProps) {
       </header>
 
       <div className="flex max-w-4xl flex-col gap-6">
+        <DiskAccessBanner />
         <DiskCard />
         {scan.error && (
           <p role="alert" className="text-sm text-red-700 dark:text-red-400">

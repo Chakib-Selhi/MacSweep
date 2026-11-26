@@ -303,3 +303,21 @@ Mesure sur le Mac de développement : 1,9 million d'entrées en 71 s (cache froi
 - **Tailles** : mesurées dans le worker (tâche `measure`), jamais dans le processus principal.
 - **Tests** : `/Applications` est remplacé par `<dossier parent de la racine de test>/Applications` ; aucune vraie app n'est lue ni déplacée.
 - Les agents de connexion ne sont pas déchargés avec `launchctl` : le fichier part dans la Corbeille et l'agent s'arrête à la prochaine ouverture de session.
+
+## M8
+
+### D48. Détection de l'Accès complet au disque
+
+macOS n'offre pas d'API pour savoir si une app a l'Accès complet au disque. MacSweep tente de lister `~/Library/Safari`, `~/Library/Mail` et `~/Library/Messages` (lecture seule, sans rien ouvrir à l'intérieur). Un refus (`EPERM`) signifie que l'accès manque, une lecture réussie qu'il est donné ; si aucun de ces dossiers n'existe, la réponse est « inconnu » et aucun bandeau n'est affiché. La vérification est refaite quand la fenêtre reprend le focus, au retour des Réglages Système. Le bouton ouvre seulement l'adresse fixe `x-apple.systempreferences:…Privacy_AllFiles` (schéma des Réglages Système, pas une requête réseau), depuis le processus principal.
+
+### D49. Signature ad hoc et `.dmg`
+
+`@electron/osx-sign` ne sait signer qu'avec une identité du trousseau. La signature ad hoc (`codesign --force --deep --sign -`) est donc faite dans le hook `postPackage` de Forge, après l'écriture de `Info.plist` et l'activation des fuses : sans ce hook, la signature laissée par Electron était invalide (« Info.plist modified »). Le hook vérifie aussitôt la signature et fait échouer la compilation si elle n'est pas valide. Gatekeeper refuse toujours une app non notariée (`spctl` : rejected) ; le README explique comment l'ouvrir. L'icône vient de `assets/icon.svg`, rendue en PNG 1024 par Electron, puis convertie en `assets/icon.icns` avec `sips` et `iconutil`.
+
+### D50. Worker dans `app.asar` (suite de D21)
+
+Vérifié : `app.asar` contient `.vite/build/scan-worker.cjs`. Le code empaqueté, lancé depuis l'archive sur une racine de test, mesure les apps et termine une exploration, donc le worker se charge bien depuis l'archive. L'app finale ne peut pas être pilotée par Playwright : le fuse `EnableNodeCliInspectArguments` est désactivé, ce qui est voulu. La vérification passe donc par l'Electron de développement, qui charge `app.asar` tel quel.
+
+### D51. Vérifications restées manuelles
+
+« Remettre en place » depuis le Finder (D32) et l'ajout réel de l'Accès complet au disque passent par la vraie Corbeille et les Réglages Système : ils sont décrits dans le README et faits à la main. `npm audit` a été refait : 0 faille dans les dépendances embarquées ; l'alerte `image-size` de D11 concerne toujours le seul outil de fabrication du `.dmg`.

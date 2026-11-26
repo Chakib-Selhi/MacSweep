@@ -149,7 +149,7 @@ export const strings = {
       failed: 'L’exploration a échoué',
     } satisfies Record<ScanStatus, string>,
     summary: (size: string, files: string, duration: string) =>
-      `${size} dans ${files} fichiers, analysés en ${duration}.`,
+      `${size} dans ${files} fichier${files === '0' || files === '1' ? '' : 's'}, analysés en ${duration}.`,
     denied: (count: number) =>
       `${count} dossier${count > 1 ? 's' : ''} illisible${count > 1 ? 's' : ''}, compté${count > 1 ? 's' : ''} pour ce qui a pu être lu.`,
     hidden: (size: string) =>
@@ -169,6 +169,17 @@ export const strings = {
     empty: 'Ce dossier est vide.',
     gone: 'Ce dossier n’est plus dans la carte. Relance l’exploration.',
     mapLabel: 'Carte du dossier',
+  },
+  access: {
+    title: 'Accès complet au disque désactivé',
+    body: 'macOS empêche MacSweep de lire certains dossiers (Mail, Safari, Messages, conteneurs d’apps). Ils ne sont ni mesurés ni proposés au nettoyage. Rien n’est touché sans cet accès : il sert seulement à tout voir.',
+    howTo: 'Comment l’activer ?',
+    steps: [
+      'Clique sur « Ouvrir les Réglages Système ».',
+      'Dans Accès complet au disque, clique sur + et choisis MacSweep dans le dossier Applications.',
+      'Active l’interrupteur à côté de MacSweep, puis quitte et rouvre MacSweep.',
+    ],
+    open: 'Ouvrir les Réglages Système',
   },
   apps: {
     title: 'Désinstaller des apps',

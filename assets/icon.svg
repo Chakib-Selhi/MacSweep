@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+    <linearGradient id="reflet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="carre">
+      <rect x="100" y="100" width="824" height="824" rx="185"/>
+    </clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#fond)"/>
+  <rect x="100" y="100" width="824" height="440" fill="url(#reflet)" clip-path="url(#carre)"/>
+  <g transform="translate(-50 -70) rotate(-35 512 512)">
+    <rect x="490" y="190" width="44" height="380" rx="22" fill="#ffffff"/>
+    <path d="M400 560 h224 l46 230 q-158 40 -316 0 z" fill="#ffffff"/>
+    <g stroke="#0d9488" stroke-width="14" stroke-linecap="round" opacity="0.55">
+      <line x1="452" y1="600" x2="440" y2="770"/>
+      <line x1="512" y1="600" x2="512" y2="780"/>
+      <line x1="572" y1="600" x2="584" y2="770"/>
+    </g>
+  </g>
+  <g fill="#ffffff">
+    <path d="M742 250 l18 50 l50 18 l-50 18 l-18 50 l-18 -50 l-50 -18 l50 -18 z"/>
+    <path d="M800 470 l11 30 l30 11 l-30 11 l-11 30 l-11 -30 l-30 -11 l30 -11 z" opacity="0.85"/>
+    <path d="M250 300 l9 24 l24 9 l-24 9 l-9 24 l-9 -24 l-24 -9 l24 -9 z" opacity="0.7"/>
+  </g>
+</svg>

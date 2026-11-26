@@ -4,6 +4,12 @@ import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
+import { execFile } from 'node:child_process';
+import path from 'node:path';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
+const CODESIGN = '/usr/bin/codesign';
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -12,8 +18,21 @@ const config: ForgeConfig = {
     appBundleId: 'local.macsweep',
     appCategoryType: 'public.app-category.utilities',
     asar: true,
+    icon: 'assets/icon',
   },
   rebuildConfig: {},
+  hooks: {
+    // Ad hoc signature (D49): no Apple Developer account, but a valid seal over the final bundle,
+    // made after Forge has written Info.plist and flipped the fuses.
+    postPackage: async (_config, result) => {
+      if (result.platform !== 'darwin') return;
+      for (const outputPath of result.outputPaths) {
+        const appPath = path.join(outputPath, 'MacSweep.app');
+        await run(CODESIGN, ['--force', '--deep', '--sign', '-', appPath]);
+        await run(CODESIGN, ['--verify', '--deep', '--strict', appPath]);
+      }
+    },
+  },
   makers: [new MakerDMG({ format: 'ULFO' }), new MakerZIP({}, ['darwin'])],
   plugins: [
     new VitePlugin({

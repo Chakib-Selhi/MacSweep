@@ -266,6 +266,9 @@ export interface UninstallRequest {
   dryRun: boolean;
 }
 
+/** Full Disk Access, as far as MacSweep can tell (D48). */
+export type DiskAccess = 'granted' | 'denied' | 'unknown';
+
 export interface InvokeContract {
   'disk:info': { args: []; result: DiskInfo };
   'scan:start': { args: [request?: ScanRequest]; result: string };
@@ -284,6 +287,9 @@ export interface InvokeContract {
   'explore:list': { args: [path: string]; result: ExploreListing | null };
   'explore:trash': { args: [paths: string[], request: CleanRequest]; result: CleanReport };
   'apps:list': { args: []; result: AppInfo[] };
+  'access:status': { args: []; result: DiskAccess };
+  /** Opens the Full Disk Access pane of System Settings, and nothing else. */
+  'access:openSettings': { args: []; result: void };
   'apps:uninstall': { args: [appPath: string, request: UninstallRequest]; result: CleanReport };
 }
 
@@ -340,6 +346,10 @@ export interface MacSweepApi {
     trash(paths: string[], request: CleanRequest): Promise<CleanReport>;
     onProgress(listener: (progress: ExploreProgress) => void): Unsubscribe;
     onDone(listener: (done: ExploreDone) => void): Unsubscribe;
+  };
+  access: {
+    status(): Promise<DiskAccess>;
+    openSettings(): Promise<void>;
   };
   apps: {
     list(): Promise<AppInfo[]>;

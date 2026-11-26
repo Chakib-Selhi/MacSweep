@@ -46,9 +46,9 @@ mkdir -p "$TMPDIR/macsweep-essai/Library/Caches/demo" && MACSWEEP_TEST_ROOT="$TM
 npm run make
 ```
 
-Le `.dmg` et le `.zip` sont créés dans `out/make/`. L'app est signée en ad hoc, ce qui suffit sur ton propre Mac Apple Silicon. Après chaque nouvelle compilation, la signature change : macOS peut redemander l'Accès complet au disque. C'est normal.
+Le `.dmg` et le `.zip` sont créés dans `out/make/` (environ 120 Mo). L'app porte son icône et une signature ad hoc, faite à la fin de la compilation et vérifiée par `codesign --verify --deep --strict` : c'est ce qui suffit sur ton propre Mac Apple Silicon, sans compte Apple Developer. Pour l'installer, ouvre le `.dmg` et glisse MacSweep dans Applications. Après chaque nouvelle compilation, la signature change : macOS peut redemander l'Accès complet au disque. C'est normal.
 
-Pour la donner à quelqu'un d'autre, Gatekeeper affichera un avertissement. La personne fait clic droit sur l'app, puis « Ouvrir », ou lance :
+L'app n'est pas notariée : au premier lancement d'une copie téléchargée, Gatekeeper affiche un avertissement. La personne fait clic droit sur l'app, puis « Ouvrir », ou lance :
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/MacSweep.app
@@ -86,11 +86,18 @@ L'écran **Applications** liste les apps de `/Applications` et `~/Applications`,
 
 ## Activer l'Accès complet au disque
 
-Sans cet accès, certains dossiers de `~/Library` sont illisibles. MacSweep fonctionne quand même et affiche le nombre de dossiers inaccessibles.
+Sans cet accès, certains dossiers de `~/Library` sont illisibles (Mail, Safari, Messages, conteneurs d'apps). MacSweep fonctionne quand même : le tableau de bord affiche alors un bandeau, avec un bouton qui ouvre directement le bon panneau des Réglages Système. Le bandeau disparaît dès que l'accès est donné.
 
 1. Ouvre **Réglages Système → Confidentialité et sécurité → Accès complet au disque**.
 2. Clique sur **+** et ajoute `MacSweep.app`. En développement, ajoute plutôt l'app `Electron` lancée par `npm start` : `node_modules/electron/dist/Electron.app`.
 3. Relance MacSweep.
+
+## Vérifications manuelles
+
+Deux points ne peuvent pas être testés automatiquement, parce qu'ils touchent ta vraie Corbeille ou les Réglages Système :
+
+1. **Remettre en place** : avec le mode simulation désactivé, nettoie un petit élément sans importance (par exemple un cache), ouvre la Corbeille dans le Finder, clic droit sur l'élément, puis « Remettre ». Il doit revenir à son emplacement d'origine.
+2. **Accès complet au disque** : sur l'app installée, clique sur « Ouvrir les Réglages Système » dans le bandeau, ajoute MacSweep, relance-le : le bandeau ne doit plus apparaître.
 
 ## Structure
 

@@ -66,6 +66,10 @@ const api: MacSweepApi = {
     onProgress: (listener) => subscribe('explore:progress', listener),
     onDone: (listener) => subscribe('explore:done', listener),
   },
+  access: {
+    status: () => invoke('access:status'),
+    openSettings: () => invoke('access:openSettings'),
+  },
   apps: {
     list: () => invoke('apps:list'),
     uninstall: (appPath, request) => invoke('apps:uninstall', appPath, request),
