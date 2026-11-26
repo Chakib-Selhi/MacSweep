@@ -1,11 +1,12 @@
 import { strings } from '../strings';
 
 export type PageId =
-  'dashboard' | 'explorer' | 'largeFiles' | 'duplicates' | 'history' | 'settings';
+  'dashboard' | 'explorer' | 'apps' | 'largeFiles' | 'duplicates' | 'history' | 'settings';
 
 const PAGES: readonly PageId[] = [
   'dashboard',
   'explorer',
+  'apps',
   'largeFiles',
   'duplicates',
   'history',

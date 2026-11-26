@@ -2,6 +2,7 @@ import { CATEGORY_IDS, isCategoryId, type CategoryId } from '../shared/categorie
 import type {
   CleanRequest,
   ExploreScope,
+  UninstallRequest,
   InvokeArgs,
   InvokeChannel,
   ScanRequest,
@@ -103,6 +104,31 @@ export function parseCleanArgs(raw: readonly unknown[]): [string[], CleanRequest
       ...(confirmHighRisk === true ? { confirmHighRisk: true } : {}),
     },
   ];
+}
+
+const MAX_LEFTOVERS = 1000;
+const MAX_NAME_LENGTH = 255;
+const UNINSTALL_KEYS = new Set(['confirmName', 'leftovers', 'dryRun']);
+
+/** Shape only: the app goes through checkUninstallable, each leftover through the guard. */
+export function parseUninstallArgs(raw: readonly unknown[]): [string, UninstallRequest] {
+  const [appPath, request] = raw;
+  if (raw.length !== 2 || typeof appPath !== 'string') fail('apps:uninstall attend une app');
+  if (!isPlainObject(request)) fail('apps:uninstall attend des options');
+  if (Object.keys(request).some((k) => !UNINSTALL_KEYS.has(k))) fail('Option inconnue');
+  const { confirmName, leftovers, dryRun } = request;
+  if (typeof confirmName !== 'string' || confirmName.length > MAX_NAME_LENGTH) {
+    fail('confirmName doit être le nom de l’app');
+  }
+  if (
+    !Array.isArray(leftovers) ||
+    leftovers.length > MAX_LEFTOVERS ||
+    !leftovers.every((item) => typeof item === 'string')
+  ) {
+    fail('leftovers doit être une liste de chemins');
+  }
+  if (typeof dryRun !== 'boolean') fail('dryRun doit être un booléen');
+  return [appPath, { confirmName, leftovers, dryRun }];
 }
 
 const MAX_FOLDERS = 100;

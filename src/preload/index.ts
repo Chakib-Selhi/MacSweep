@@ -66,6 +66,10 @@ const api: MacSweepApi = {
     onProgress: (listener) => subscribe('explore:progress', listener),
     onDone: (listener) => subscribe('explore:done', listener),
   },
+  apps: {
+    list: () => invoke('apps:list'),
+    uninstall: (appPath, request) => invoke('apps:uninstall', appPath, request),
+  },
 };
 
 contextBridge.exposeInMainWorld('macsweep', api);

@@ -291,3 +291,15 @@ Les caches de navigateurs, les caches Xcode et les pièces jointes Mail sont rat
 ### D46. Coût de l'exploration de tout le disque
 
 Mesure sur le Mac de développement : 1,9 million d'entrées en 71 s (cache froid), environ 250 Mo de mémoire dans le worker et 1,4 million de nœuds. L'arbre est envoyé au processus principal en tableaux typés transférés (sans copie), et l'index des enfants se construit en 20 ms. Une seule exploration à la fois. Aucun nettoyage n'est accepté pendant qu'elle tourne.
+
+### D47. Désinstallateur (M7)
+
+- **Garde** : `checkUninstallable` (`guard.ts`) applique D29. Le chemin doit être un bundle `.app` directement dans `/Applications` ou `~/Applications`, un vrai dossier (pas un lien) dont le dossier parent n'est pas atteint par un lien, appartenant à l'utilisateur, sans `Contents/_MASReceipt`, avec un identifiant qui ne commence pas par `com.apple.`, et le nom de l'app tapé dans le dialogue. Seul le canal `apps:uninstall` l'appelle. `~/Applications` suit les mêmes règles.
+- **App ouverte** : vérifiée avec `lsappinfo` au moment de la liste, puis de nouveau juste avant la mise à la Corbeille (par identifiant ou par nom). Si la liste des apps ouvertes est illisible, la désinstallation est refusée.
+- **Identifiant** : lu par `/usr/bin/plutil -extract CFBundleIdentifier raw` (lit aussi les plist binaires), sans shell.
+- **Restes** : seulement dans `~/Library`, par identifiant exact (`Caches/<id>`, `Preferences/<id>.plist`, `Preferences/ByHost/<id>.*.plist`, `Containers/<id>`, `Group Containers/*.<id>`, `Saved Application State/<id>.savedState`, `HTTPStorages`, `WebKit`, `Cookies`, `Logs`, `LaunchAgents/<id>*.plist`), ou par nom exact de l'app dans `Caches`, `Application Support` et `Logs` quand ce nom fait au moins 3 caractères. Le point après l'identifiant évite qu'un identifiant plus long (`com.acme.outil2`) corresponde. Chaque reste passe aussi par `checkTrashable`, donc la liste noire (Mail, Messages, Keychains…) s'applique.
+- **Cochés par défaut** : ce qui se reconstruit (caches, état des fenêtres, journaux, données web, agents de connexion). Préférences, données de l'app et conteneurs restent décochés, car ils peuvent contenir des documents ou des réglages que l'utilisateur voudra retrouver s'il réinstalle.
+- **Ordre** : l'app d'abord. Si macOS la refuse, aucun reste n'est déplacé. Seuls les restes signalés par la dernière liste sont acceptés (`not-scanned` sinon).
+- **Tailles** : mesurées dans le worker (tâche `measure`), jamais dans le processus principal.
+- **Tests** : `/Applications` est remplacé par `<dossier parent de la racine de test>/Applications` ; aucune vraie app n'est lue ni déplacée.
+- Les agents de connexion ne sont pas déchargés avec `launchctl` : le fichier part dans la Corbeille et l'agent s'arrête à la prochaine ouverture de session.

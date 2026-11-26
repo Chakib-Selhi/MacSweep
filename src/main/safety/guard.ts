@@ -242,6 +242,62 @@ export async function createGuard({ root }: { root: string }): Promise<Guard> {
   };
 }
 
+export interface UninstallContext {
+  /** The applications folders, as real paths: /Applications and ~/Applications. */
+  appDirs: readonly string[];
+  /** The current user: only their own bundles can go without sudo. */
+  uid: number;
+  /** Reads CFBundleIdentifier from the bundle's Info.plist; null when there is none. */
+  readBundleId(appPath: string): Promise<string | null>;
+  /** The user typed the app's name in the confirmation dialog. */
+  confirmed: boolean;
+}
+
+const APP_SUFFIX = '.app';
+const APPLE_PREFIX = 'com.apple.';
+
+/**
+ * D29, the one exception to the blacklist: a `.app` bundle directly inside an applications
+ * folder, owned by the user, neither from Apple nor from the App Store, confirmed by name.
+ * Reached only from the uninstall channel. Running apps are checked by the caller.
+ */
+export async function checkUninstallable(
+  input: unknown,
+  context: UninstallContext,
+): Promise<GuardResult> {
+  const absolute = normalizeInput(input);
+  if (!absolute) return refuse('invalid-input');
+  const parent = path.dirname(absolute);
+  const appDir = context.appDirs.find((dir) => key(dir) === key(parent));
+  if (!appDir) {
+    const inside = context.appDirs.some((dir) => startsWith(segments(absolute), segments(dir)));
+    return refuse(inside || context.appDirs.includes(absolute) ? 'not-app' : 'outside-root');
+  }
+  if (!path.basename(absolute).toLowerCase().endsWith(APP_SUFFIX)) return refuse('not-app');
+
+  let stats;
+  try {
+    stats = await lstat(absolute);
+  } catch (error) {
+    const code = errorCode(error);
+    return refuse(code === 'ENOENT' || code === 'ENOTDIR' ? 'not-found' : 'unreadable');
+  }
+  if (stats.isSymbolicLink() || !stats.isDirectory()) return refuse('not-app');
+  try {
+    // The applications folder itself must not be reached through a link.
+    if ((await realpath(parent)) !== (await realpath(appDir))) return refuse('not-app');
+  } catch {
+    return refuse('unreadable');
+  }
+  if (stats.uid !== context.uid) return refuse('not-owner');
+  if (await exists(path.join(absolute, 'Contents/_MASReceipt'))) return refuse('app-store');
+  const bundleId = await context.readBundleId(absolute).catch(() => null);
+  if (!bundleId) return refuse('not-app');
+  if (bundleId.toLowerCase().startsWith(APPLE_PREFIX)) return refuse('apple-app');
+  if (!context.confirmed) return refuse('not-confirmed');
+  return { ok: true, path: absolute };
+}
+
 export class GuardInputError extends Error {
   constructor(message: string) {
     super(message);

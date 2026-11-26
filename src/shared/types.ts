@@ -80,7 +80,17 @@ export type GuardRefusal =
   | 'trash'
   | 'broken-symlink'
   /** Shown by the disk map but never cleaned from it (D45). */
-  | 'read-only';
+  | 'read-only'
+  /** Uninstaller (D29): not a `.app` bundle directly inside an applications folder. */
+  | 'not-app'
+  /** Uninstaller: the bundle belongs to another user (often root): it would need sudo. */
+  | 'not-owner'
+  /** Uninstaller: an Apple app (com.apple.*). */
+  | 'apple-app'
+  /** Uninstaller: an App Store app, removed from Launchpad or the App Store. */
+  | 'app-store'
+  /** Uninstaller: the app name was not typed in the confirmation dialog. */
+  | 'not-confirmed';
 
 export type CleanFailureReason =
   | GuardRefusal
@@ -216,6 +226,46 @@ export interface ExploreDone {
   error?: string;
 }
 
+export type LeftoverKind =
+  | 'caches'
+  | 'preferences'
+  | 'app-support'
+  | 'containers'
+  | 'group-containers'
+  | 'saved-state'
+  | 'logs'
+  | 'web-data'
+  | 'launch-agents';
+
+/** What an app leaves in ~/Library, found by its bundle identifier or exact name. */
+export interface AppLeftover {
+  path: string;
+  kind: LeftoverKind;
+  sizeBytes: number;
+  /** Data the user may want to keep (settings, documents of the app) is left unchecked (D47). */
+  defaultChecked: boolean;
+}
+
+export interface AppInfo {
+  path: string;
+  name: string;
+  bundleId: string | null;
+  location: 'system' | 'user';
+  sizeBytes: number;
+  running: boolean;
+  /** Why the uninstaller would refuse it (Apple app, App Store, other owner, open). */
+  refusal?: CleanFailureReason;
+  leftovers: AppLeftover[];
+}
+
+export interface UninstallRequest {
+  /** The app name, typed by the user in the confirmation dialog. */
+  confirmName: string;
+  /** Leftovers to send to the Trash with the app; each must be one the list reported. */
+  leftovers: string[];
+  dryRun: boolean;
+}
+
 export interface InvokeContract {
   'disk:info': { args: []; result: DiskInfo };
   'scan:start': { args: [request?: ScanRequest]; result: string };
@@ -233,6 +283,8 @@ export interface InvokeContract {
   /** null when the path is not part of the latest exploration. */
   'explore:list': { args: [path: string]; result: ExploreListing | null };
   'explore:trash': { args: [paths: string[], request: CleanRequest]; result: CleanReport };
+  'apps:list': { args: []; result: AppInfo[] };
+  'apps:uninstall': { args: [appPath: string, request: UninstallRequest]; result: CleanReport };
 }
 
 export interface EventContract {
@@ -288,5 +340,9 @@ export interface MacSweepApi {
     trash(paths: string[], request: CleanRequest): Promise<CleanReport>;
     onProgress(listener: (progress: ExploreProgress) => void): Unsubscribe;
     onDone(listener: (done: ExploreDone) => void): Unsubscribe;
+  };
+  apps: {
+    list(): Promise<AppInfo[]>;
+    uninstall(appPath: string, request: UninstallRequest): Promise<CleanReport>;
   };
 }

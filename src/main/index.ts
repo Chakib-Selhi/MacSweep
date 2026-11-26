@@ -14,6 +14,8 @@ import {
 import { createGuard } from './safety/guard';
 import { pickDiskRoot, pickRoot, TEST_ROOT_ENV } from './safety/root';
 import { ExploreService } from './scanner/explore-service';
+import { measureInWorker } from './scanner/measure';
+import { AppsRegistry } from './uninstaller';
 import { ScanService } from './scanner/service';
 import { createToolDeps } from './scanner/tools';
 import { createJournal } from './journal';
@@ -25,6 +27,7 @@ import { macTrash, testTrash } from './trash-mover';
 const devServerUrl: string | undefined = MAIN_WINDOW_VITE_DEV_SERVER_URL || undefined;
 const rendererDir = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}`);
 const scanWorkerPath = path.join(__dirname, 'scan-worker.cjs');
+const PLUTIL = '/usr/bin/plutil';
 
 protocol.registerSchemesAsPrivileged([
   { scheme: APP_SCHEME, privileges: { standard: true, secure: true } },
@@ -182,11 +185,10 @@ async function start(): Promise<void> {
     };
   });
   const testMode = !app.isPackaged && process.env[TEST_ROOT_ENV] !== undefined;
+  const diskRoot = await pickDiskRoot({ root: guard.root, tmpdir: os.tmpdir(), testMode });
+  const tools = createToolDeps(guard.root);
   const explore = new ExploreService(scanWorkerPath, {
-    roots: {
-      home: guard.root,
-      disk: await pickDiskRoot({ root: guard.root, tmpdir: os.tmpdir(), testMode }),
-    },
+    roots: { home: guard.root, disk: diskRoot },
     homePath: guard.root,
     exclusions: () => store.getSettings().exclusions,
   });
@@ -206,7 +208,28 @@ async function start(): Promise<void> {
     store,
     journal: createJournal(path.join(app.getPath('userData'), 'logs')),
     moveToTrash: testMode ? testTrash(guard.root) : macTrash,
-    runTool: createToolDeps(guard.root).run,
+    runTool: tools.run,
+    apps: {
+      registry: new AppsRegistry(),
+      // Tests use a fake /Applications next to the fake home folder (rule 5).
+      dirs: {
+        system: testMode ? path.join(diskRoot, 'Applications') : '/Applications',
+        user: path.join(guard.root, 'Applications'),
+      },
+      uid: process.getuid?.() ?? -1,
+      readBundleId: (appPath) =>
+        tools
+          .run(PLUTIL, [
+            '-extract',
+            'CFBundleIdentifier',
+            'raw',
+            '-o',
+            '-',
+            path.join(appPath, 'Contents/Info.plist'),
+          ])
+          .then((output) => output.trim() || null),
+      measure: (paths) => measureInWorker(scanWorkerPath, paths),
+    },
   });
   createMainWindow();
 

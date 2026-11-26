@@ -1,5 +1,5 @@
 import type { CategoryId, RiskLevel } from '../shared/categories';
-import type { CleanFailureReason, ScanStatus } from '../shared/types';
+import type { CleanFailureReason, LeftoverKind, ScanStatus } from '../shared/types';
 
 export const strings = {
   appName: 'MacSweep',
@@ -7,6 +7,7 @@ export const strings = {
     label: 'Navigation principale',
     dashboard: 'Tableau de bord',
     explorer: 'Exploration',
+    apps: 'Applications',
     largeFiles: 'Gros fichiers',
     duplicates: 'Doublons',
     history: 'Historique',
@@ -113,6 +114,11 @@ export const strings = {
       trash: 'dans la Corbeille',
       'broken-symlink': 'lien cassé',
       'read-only': 'en lecture seule dans l’exploration',
+      'not-app': 'pas une app d’un dossier Applications',
+      'not-owner': 'appartient à un autre utilisateur',
+      'apple-app': 'app Apple',
+      'app-store': 'app de l’App Store',
+      'not-confirmed': 'nom de l’app non confirmé',
       'not-scanned': 'absent du dernier scan',
       'app-open': 'app ouverte',
       'app-check-failed': 'impossible de vérifier les apps ouvertes',
@@ -163,6 +169,45 @@ export const strings = {
     empty: 'Ce dossier est vide.',
     gone: 'Ce dossier n’est plus dans la carte. Relance l’exploration.',
     mapLabel: 'Carte du dossier',
+  },
+  apps: {
+    title: 'Désinstaller des apps',
+    intro:
+      'Les apps de /Applications et ~/Applications, avec ce qu’elles laissent dans ~/Library. Les apps Apple, celles de l’App Store et celles d’un autre utilisateur ne peuvent pas être désinstallées ici.',
+    refresh: 'Actualiser',
+    loading: 'Lecture des apps…',
+    error: 'Impossible de lire la liste des apps.',
+    search: 'Rechercher une app',
+    empty: 'Aucune app trouvée.',
+    choose: 'Choisis une app dans la liste.',
+    locations: { system: '/Applications', user: '~/Applications' },
+    total: (size: string) => `${size} avec les restes`,
+    leftoversTitle: 'Restes dans ~/Library',
+    noLeftovers: 'Aucun reste trouvé.',
+    leftoverHint: 'Réglages et données de l’app : décochés par défaut, à toi de choisir.',
+    kinds: {
+      caches: 'Caches',
+      preferences: 'Préférences',
+      'app-support': 'Données de l’app',
+      containers: 'Conteneur',
+      'group-containers': 'Conteneur partagé',
+      'saved-state': 'État des fenêtres',
+      logs: 'Journaux',
+      'web-data': 'Données web',
+      'launch-agents': 'Agent de connexion',
+    } satisfies Record<LeftoverKind, string>,
+    selectLeftover: (name: string) => `Inclure ${name}`,
+    selected: (size: string) => `${size} iront à la Corbeille`,
+    uninstall: 'Désinstaller…',
+    refused: (reason: string) => `Non désinstallable : ${reason}.`,
+    dialogTitle: (name: string) => `Désinstaller ${name}`,
+    dialogTitleDry: (name: string) => `Simuler la désinstallation de ${name}`,
+    dialogSummary: (count: string, size: string) =>
+      `L’app et ${count} reste${count === '0' || count === '1' ? '' : 's'} · ${size}`,
+    typeName: (name: string) => `Pour confirmer, tape le nom de l’app : ${name}`,
+    confirm: 'Mettre à la Corbeille',
+    confirmDry: 'Lancer la simulation',
+    running: 'Désinstallation en cours…',
   },
   largeFiles: {
     title: 'Gros fichiers',
@@ -275,5 +320,6 @@ export const strings = {
     'large-files': 'Gros fichiers',
     duplicates: 'Doublons',
     explorer: 'Exploration du disque',
+    uninstaller: 'Désinstallation d’apps',
   } satisfies Record<CategoryId, string>,
 } as const;

@@ -196,6 +196,7 @@ export async function planCategory(id: CategoryId, ctx: PlanContext): Promise<Ca
     case 'large-files':
     case 'duplicates':
     case 'explorer':
+    case 'uninstaller':
       // Walked by the engine itself, see large-files.ts and duplicates.ts.
       return null;
   }

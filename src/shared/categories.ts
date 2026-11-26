@@ -21,6 +21,7 @@ export const CATEGORY_IDS = [
   'duplicates',
   'trash',
   'explorer',
+  'uninstaller',
 ] as const;
 
 export type CategoryId = (typeof CATEGORY_IDS)[number];
@@ -64,6 +65,8 @@ export const CATEGORY_META: Record<CategoryId, CategoryMeta> = {
   trash: { risk: 'low', defaultChecked: false, permanent: true },
   /** Items sent to the Trash from the disk map (D45), never part of a scan. */
   explorer: { risk: 'high', defaultChecked: false },
+  /** Apps and their leftovers sent to the Trash by the uninstaller (D29, D47). */
+  uninstaller: { risk: 'high', defaultChecked: false },
 };
 
 export function isCategoryId(value: unknown): value is CategoryId {

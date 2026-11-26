@@ -76,6 +76,14 @@ L'écran **Exploration** montre ce qui occupe l'espace, dossier par dossier, sou
 - Tout est en **lecture seule**, sauf les éléments de ton dossier utilisateur hors `~/Library`, hors éléments cachés et hors apps (`.app`). Ceux-là peuvent aller à la Corbeille avec la confirmation du risque élevé.
 - L'écart entre l'espace utilisé et ce que montre la carte vient des instantanés APFS, des volumes système, de l'espace purgeable et des dossiers illisibles.
 
+## Désinstaller une app
+
+L'écran **Applications** liste les apps de `/Applications` et `~/Applications`, avec leur taille et ce qu'elles laissent dans `~/Library` (caches, préférences, données, conteneurs, état des fenêtres, journaux, agents de connexion).
+
+- Seules tes propres apps peuvent être désinstallées. Les apps Apple, celles de l'App Store, celles d'un autre utilisateur (installées par un administrateur) et les apps ouvertes sont refusées. Aucun `sudo` n'est utilisé.
+- Les caches, journaux et états de fenêtres sont cochés par défaut. Les préférences et les données de l'app restent décochées : à toi de décider.
+- Pour confirmer, tape le nom exact de l'app. Tout va dans la Corbeille, d'où tu peux remettre l'app en place.
+
 ## Activer l'Accès complet au disque
 
 Sans cet accès, certains dossiers de `~/Library` sont illisibles. MacSweep fonctionne quand même et affiche le nombre de dossiers inaccessibles.

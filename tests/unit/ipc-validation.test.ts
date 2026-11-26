@@ -7,6 +7,7 @@ import {
   IpcValidationError,
   parseCleanArgs,
   parseExploreScope,
+  parseUninstallArgs,
   parseScanArgs,
   parseSettingsPatch,
 } from '../../src/main/ipc-validation';
@@ -163,5 +164,29 @@ describe('parseExploreScope', () => {
 
   it.each([[[]], [['/']], [['home', 'disk']], [[{ scope: 'disk' }]]])('refuse %j', (raw) => {
     expect(() => parseExploreScope(raw)).toThrow();
+  });
+});
+
+describe('parseUninstallArgs', () => {
+  const ok = { confirmName: 'Outil', leftovers: ['/Users/q/Library/Caches/x'], dryRun: true };
+
+  it('accepte une demande bien formée', () => {
+    expect(parseUninstallArgs(['/Applications/Outil.app', ok])).toEqual([
+      '/Applications/Outil.app',
+      ok,
+    ]);
+  });
+
+  it.each([
+    [[]],
+    [['/Applications/Outil.app']],
+    [[42, ok]],
+    [['/Applications/Outil.app', { ...ok, force: true }]],
+    [['/Applications/Outil.app', { ...ok, confirmName: 3 }]],
+    [['/Applications/Outil.app', { ...ok, leftovers: [1] }]],
+    [['/Applications/Outil.app', { ...ok, leftovers: 'a' }]],
+    [['/Applications/Outil.app', { ...ok, dryRun: 'non' }]],
+  ])('refuse %j', (raw) => {
+    expect(() => parseUninstallArgs(raw)).toThrow();
   });
 });

@@ -24,3 +24,15 @@ export interface ExploreWorkerInput {
 
 export type ExploreWorkerMessage =
   { type: 'progress'; progress: ExploreProgress } | { type: 'done'; tree: FlatTree };
+
+/** Sizes of a list of paths (apps and their leftovers), measured like the scan does. */
+export interface MeasureWorkerInput {
+  kind: 'measure';
+  paths: string[];
+  cancelBuffer: SharedArrayBuffer;
+}
+
+export interface MeasureWorkerMessage {
+  type: 'measured';
+  sizes: number[];
+}

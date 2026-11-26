@@ -2,6 +2,8 @@ import { BrowserWindow, dialog, ipcMain, shell, type WebContents } from 'electro
 import { randomUUID } from 'node:crypto';
 import type { CategoryId } from '../shared/categories';
 import type {
+  AppInfo,
+  CleanFailureReason,
   CleanProgress,
   CleanReport,
   EventChannel,
@@ -18,6 +20,7 @@ import {
   expectSingleString,
   parseCleanArgs,
   parseExploreScope,
+  parseUninstallArgs,
   parseScanArgs,
   parseSettingsPatch,
   type ArgsParser,
@@ -25,13 +28,20 @@ import {
 import type { Journal } from './journal';
 import { isTrustedSenderUrl } from './origins';
 import { annotateOpenApps, listRunningApps } from './running-apps';
-import { browsablePath, exploreTrashRefusal, type Guard } from './safety/guard';
+import { browsablePath, checkUninstallable, exploreTrashRefusal, type Guard } from './safety/guard';
 import type { ScanRegistry } from './scan-registry';
 import { exploreRegistry } from './scanner/explore';
 import type { ExploreService } from './scanner/explore-service';
 import type { ScanService } from './scanner/service';
 import type { ToolRunner } from './scanner/tools';
 import type { AppStore } from './store';
+import {
+  AppsRegistry,
+  findLeftovers,
+  isAppRunning,
+  listAppBundles,
+  uninstallApp,
+} from './uninstaller';
 import { emptyTrash } from './trash-empty';
 import type { TrashMover } from './trash-mover';
 
@@ -45,6 +55,14 @@ interface IpcDeps {
   journal: Journal;
   moveToTrash: TrashMover;
   runTool: ToolRunner;
+  apps: {
+    registry: AppsRegistry;
+    dirs: { system: string; user: string };
+    uid: number;
+    readBundleId(appPath: string): Promise<string | null>;
+    /** Sizes measured in the worker, in the same order as the paths. */
+    measure(paths: readonly string[]): Promise<number[]>;
+  };
 }
 
 function send<C extends EventChannel>(target: WebContents, channel: C, payload: EventContract[C]) {
@@ -54,6 +72,14 @@ function send<C extends EventChannel>(target: WebContents, channel: C, payload: 
 export function registerIpcHandlers(deps: IpcDeps): void {
   const { devServerUrl, guard, scans, explore, registry, store, journal, moveToTrash, runTool } =
     deps;
+  const apps = deps.apps;
+  const checkApp = (appPath: string, confirmed: boolean) =>
+    checkUninstallable(appPath, {
+      appDirs: [apps.dirs.system, apps.dirs.user],
+      uid: apps.uid,
+      readBundleId: (appPath) => apps.readBundleId(appPath),
+      confirmed,
+    });
   let busyCleaning = false;
 
   function handle<C extends InvokeChannel>(
@@ -236,6 +262,77 @@ export function registerIpcHandlers(deps: IpcDeps): void {
           failedCount: report.failed.length,
         });
       }
+      return report;
+    }),
+  );
+
+  handle('apps:list', expectNoArgs, async () => {
+    const bundles = await listAppBundles(apps.dirs, (appPath) => apps.readBundleId(appPath));
+    const running = await listRunningApps(runTool).catch(() => null);
+    const found = await Promise.all(
+      bundles.map(async (bundle) => {
+        const candidates = await findLeftovers(guard.root, bundle.bundleId, bundle.name);
+        const allowed = [];
+        for (const leftover of candidates) {
+          if ((await guard.checkTrashable(leftover.path)).ok) allowed.push(leftover);
+        }
+        return { bundle, leftovers: allowed };
+      }),
+    );
+    const paths = found.flatMap(({ bundle, leftovers }) => [
+      bundle.path,
+      ...leftovers.map((leftover) => leftover.path),
+    ]);
+    const sizes = await apps.measure(paths);
+    let at = 0;
+    const next = () => sizes[at++] ?? 0;
+    apps.registry.clear();
+    const list: AppInfo[] = [];
+    for (const { bundle, leftovers } of found) {
+      const sizeBytes = next();
+      const measured = leftovers.map((leftover) => ({ ...leftover, sizeBytes: next() }));
+      apps.registry.set({ ...bundle, sizeBytes, leftovers: measured });
+      let refusal: CleanFailureReason | undefined;
+      if (!running) refusal = 'app-check-failed';
+      else if (isAppRunning(bundle, running)) refusal = 'app-open';
+      else {
+        const checked = await checkApp(bundle.path, true);
+        if (!checked.ok) refusal = checked.reason;
+      }
+      list.push({
+        ...bundle,
+        sizeBytes,
+        running: running ? isAppRunning(bundle, running) : false,
+        leftovers: measured,
+        ...(refusal ? { refusal } : {}),
+      });
+    }
+    return list.sort((a, b) => b.sizeBytes - a.sizeBytes);
+  });
+
+  handle('apps:uninstall', parseUninstallArgs, (_sender, appPath, request) =>
+    exclusive(async () => {
+      const dryRun = store.getSettings().dryRun || request.dryRun;
+      const report = await uninstallApp(
+        appPath,
+        { ...request, dryRun },
+        {
+          registry: apps.registry,
+          guard,
+          check: checkApp,
+          listRunningApps: () => listRunningApps(runTool),
+          moveToTrash,
+          journal,
+          now: () => Date.now(),
+        },
+      );
+      if (!report.dryRun) {
+        for (const item of report.moved) {
+          explore.current?.forget(item.path);
+          registry.forget(item.path);
+        }
+      }
+      recordClean(report);
       return report;
     }),
   );

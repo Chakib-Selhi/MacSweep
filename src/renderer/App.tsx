@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CategoryPage } from '../shared/categories';
 import { Sidebar, type PageId } from './components/Sidebar';
 import { Dashboard } from './pages/Dashboard';
+import { AppsPage } from './pages/Apps';
 import { DuplicatesPage } from './pages/Duplicates';
 import { ExplorePage } from './pages/Explore';
 import { HistoryPage } from './pages/History';
@@ -37,6 +38,7 @@ export function App() {
               )}
               {page === 'review' && <Review onBack={() => setPage('dashboard')} />}
               {page === 'explorer' && <ExplorePage />}
+              {page === 'apps' && <AppsPage />}
               {page === 'largeFiles' && (
                 <LargeFilesPage onOpenSettings={() => setPage('settings')} />
               )}
